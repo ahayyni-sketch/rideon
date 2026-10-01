@@ -8,19 +8,29 @@
 
   function injectUI(){
     const login = document.createElement('div');
+    let authMode = 'signin';
     login.id='productionAuth';
     login.innerHTML=`<div class="prod-auth-card"><div class="brand"><div class="logo">R</div><div>RIDEON</div></div><div class="tagline" style="margin:5px 0 20px">YOUR RIDE. ALWAYS ON.</div><h2 id="authTitle">Sign in to RIDEON</h2><p class="muted" id="authSub">Use your real account. Your account, bookings, vehicles and orders are stored securely.</p><div class="field"><label>Full name (for new account)</label><input id="authName" placeholder="Your full name"></div><div class="field"><label>Email</label><input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></div><div class="field"><label>Password</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Minimum 6 characters"></div><button class="btn primary" id="authSubmit" style="width:100%">Sign in</button><button class="btn ghost" id="authToggle" style="width:100%;margin-top:8px">Create a new account</button><div class="muted tiny" id="authMsg" style="margin-top:12px"></div></div>`;
     document.body.appendChild(login);
     const style=document.createElement('style'); style.textContent=`#productionAuth{position:fixed;inset:0;background:#06100ddd;backdrop-filter:blur(12px);display:grid;place-items:center;padding:20px;z-index:100}.prod-auth-card{width:min(460px,100%);background:#10211b;border:1px solid #29453b;border-radius:24px;padding:28px;box-shadow:0 30px 100px #0009}.prod-auth-card .brand{padding:0}.prod-auth-card .logo{display:grid}.prod-auth-card .field{margin-top:12px}.prod-auth-card .tagline{font-size:9px;letter-spacing:1.25px;color:#9aafa5}.prod-auth-card h2{margin:4px 0 8px}.prod-auth-card input{background:#081410;border:1px solid #29453b;color:#f3f7f4;border-radius:11px;padding:12px;width:100%}body.auth-loading main,body.auth-loading .sidebar,body.auth-loading .mobilebar{visibility:hidden}.prod-live{border:1px solid #29453b;background:#0b1915;border-radius:15px;padding:14px;margin-top:14px}.live-map{height:320px;border-radius:14px;overflow:hidden;border:1px solid #29453b;background:#10231c}.live-badge{display:inline-flex;gap:7px;align-items:center;border-radius:999px;padding:5px 9px;background:#20372b;color:#c5f36a;font-size:10px;font-weight:850}.live-dot{width:7px;height:7px;border-radius:50%;background:#c5f36a;box-shadow:0 0 0 4px #c5f36a22}`; document.head.appendChild(style);
     document.body.classList.add('auth-loading');
-    $('#authToggle').onclick=()=>{ const signup=$('#authTitle').textContent.includes('Create'); $('#authTitle').textContent=signup?'Sign in to RIDEON':'Create your RIDEON account'; $('#authSub').textContent=signup?'Use your real account.':'Create an account to store your data permanently.'; $('#authSubmit').textContent=signup?'Sign up':'Sign in'; $('#authToggle').textContent=signup?'Create a new account':'I already have an account'; $('#authName').parentElement.style.display=signup?'grid':'none'; };
+    $('#authToggle').onclick=()=>{
+      authMode = authMode === 'signin' ? 'signup' : 'signin';
+      const signup = authMode === 'signup';
+      $('#authTitle').textContent = signup ? 'Create your RIDEON account' : 'Sign in to RIDEON';
+      $('#authSub').textContent = signup ? 'Create an account to store your data permanently.' : 'Use your real account. Your account, bookings, vehicles and orders are stored securely.';
+      $('#authSubmit').textContent = signup ? 'Sign up' : 'Sign in';
+      $('#authToggle').textContent = signup ? 'I already have an account' : 'Create a new account';
+      $('#authName').parentElement.style.display = signup ? 'grid' : 'none';
+      $('#authMsg').textContent = '';
+    };
     $('#authName').parentElement.style.display='none';
     $('#authSubmit').onclick=authSubmit;
   }
 
   async function authSubmit(){
     const email=$('#authEmail').value.trim(), password=$('#authPassword').value, name=$('#authName').value.trim();
-    const signup=$('#authTitle').textContent.includes('Create your');
+    const signup = authMode === 'signup';
     $('#authMsg').textContent='Processing…';
     let result;
     if(signup) result=await state.supabase.auth.signUp({email,password,options:{data:{full_name:name||'RIDEON Rider'}}});
