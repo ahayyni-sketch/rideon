@@ -84,9 +84,43 @@
     if(['workshop','admin'].includes(data.role)) renderStaffDispatchPanel();
   }
 
+  async function performLogout(){
+    try{
+      await state.supabase.auth.signOut();
+    }catch(e){
+      console.error('RIDEON sign out error:', e);
+    }
+    state.user=null;
+    state.profile=null;
+    try{
+      localStorage.removeItem('rideon_session');
+    }catch(e){}
+    location.reload();
+  }
+
   function addLogout(){
-    const side=document.querySelector('.side-bottom .profile');
-    if(side && !$('#logoutBtn')){ const b=document.createElement('button'); b.id='logoutBtn'; b.className='btn small danger'; b.style.marginTop='10px'; b.textContent='Sign out'; b.onclick=async()=>{await state.supabase.auth.signOut();location.reload()}; side.appendChild(b); }
+    const side=document.querySelector('.side-bottom');
+    if(side && !$('#logoutBtn')){
+      const b=document.createElement('button');
+      b.id='logoutBtn';
+      b.className='btn danger';
+      b.style.width='100%';
+      b.style.marginTop='10px';
+      b.textContent='Log out';
+      b.title='Log out of your RIDEON account';
+      b.onclick=performLogout;
+      side.appendChild(b);
+    }
+    const account=document.querySelector('[data-page="account"]');
+    if(account && !$('#logoutAccount')){
+      const host=account.querySelector('.grid') || account;
+      const wrap=document.createElement('div');
+      wrap.className='card';
+      wrap.style.marginTop='16px';
+      wrap.innerHTML='<div class="eyebrow">Security</div><h2 style="margin-top:6px">Account session</h2><p class="muted tiny">Your RIDEON session stays signed in until you choose to log out. Use the button below when you finish using this device.</p><button class="btn danger" id="logoutAccount">Log out of RIDEON</button>';
+      host.appendChild(wrap);
+      $('#logoutAccount').onclick=performLogout;
+    }
   }
 
   async function handleSession(session){
@@ -236,8 +270,7 @@
       if(e.target?.id==='bookingForm'){e.preventDefault();e.stopImmediatePropagation();onBookingSubmit(e.target);}
       if(e.target?.id==='profileForm'){e.preventDefault();e.stopImmediatePropagation();saveProfile();}
     },true);
-    const account=document.querySelector('[data-page="account"]');
-    if(account){ const h=document.createElement('div'); h.className='card'; h.style.marginTop='16px'; h.innerHTML='<div class="eyebrow">Security</div><h2 style="margin-top:6px">Real account</h2><p class="muted tiny">Your account uses Supabase Auth. Sessions persist securely in the browser; your business data is stored in Postgres.</p><button class="btn danger" id="logoutAccount">Sign out</button>'; account.querySelector('.grid')?.appendChild(h); setTimeout(()=>$('#logoutAccount')?.addEventListener('click',()=>state.supabase.auth.signOut()),0); }
+
     const host=document.querySelector('#rescue .grid.g2 > div:last-child'); if(host && !$('#liveTrackingHost')){const d=document.createElement('div');d.id='liveTrackingHost';host.appendChild(d);}
     const accountNav=document.querySelector('[data-page="account"]');
     if(accountNav){/* existing page navigation handles this */}
