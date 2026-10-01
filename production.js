@@ -211,7 +211,7 @@
   async function init(){
     injectUI();
     try{
-      const r=await fetch('/api/config',{cache:'no-store'}); state.config=await r.json(); if(!r.ok)throw new Error(state.config.error||'Configuration unavailable');
+      const r=await fetch('/api/health',{cache:'no-store'}); state.config=await r.json(); if(!r.ok)throw new Error(state.config.error||'Configuration unavailable');
       if(!window.supabase){throw new Error('Supabase browser library did not load.');}
       state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
       bindProduction();
