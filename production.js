@@ -67,29 +67,35 @@
   }
 
   async function loadProfile(){
+    const fallbackName=state.user.user_metadata?.full_name||state.user.user_metadata?.name||'RIDEON Rider';
     const {data,error}=await state.supabase.from('profiles').select('*').eq('id',state.user.id).single();
-    if(error){ console.error(error); return; }
-    state.profile=data;
-    const name=data.full_name||state.user.user_metadata?.full_name||'RIDEON Rider';
+    if(error){
+      console.error(error);
+      state.profile={full_name:fallbackName,email:state.user.email||'',phone:'',role:'customer'};
+    }else{
+      state.profile=data;
+    }
+    const profileData=state.profile||{};
+    const name=profileData.full_name||fallbackName;
     const avatar=(name.trim()[0]||'R').toUpperCase();
     const firstName=name.trim().split(/\s+/)[0]||'Rider';
     document.querySelectorAll('.profile strong').forEach(x=>x.textContent=name);
-    document.querySelectorAll('.profile small').forEach(x=>x.textContent=`${data.role} · ${state.user.email}`);
+    document.querySelectorAll('.profile small').forEach(x=>x.textContent=`${profileData.role||'customer'} · ${state.user.email}`);
     document.querySelectorAll('.avatar').forEach(x=>x.textContent=avatar);
     if($('#welcomeName')) $('#welcomeName').textContent=name;
     const homeTitle=$('#pageTitle');
     if(homeTitle && document.querySelector('#home.page.active')) homeTitle.innerHTML=`Welcome back, <span id="welcomeName">${esc(name)}</span>.`;
     if($('#profileName')) $('#profileName').value=name;
     if($('#profileEmail')) $('#profileEmail').value=state.user.email||'';
-    if($('#profilePhone')) $('#profilePhone').value=data.phone||'';
-    if($('#roleBadge')) $('#roleBadge').textContent=data.role;
-    const opsBtn=document.querySelector('[data-page="ops"]'); if(opsBtn) opsBtn.style.display=['mechanic','workshop','admin'].includes(data.role)?'flex':'none';
-    if(data.role==='mechanic') renderMechanicPanel();
-    if(['workshop','admin'].includes(data.role)) renderStaffDispatchPanel();
+    if($('#profilePhone')) $('#profilePhone').value=profileData.phone||'';
+    if($('#roleBadge')) $('#roleBadge').textContent=profileData.role||'customer';
+    const opsBtn=document.querySelector('[data-page="ops"]'); if(opsBtn) opsBtn.style.display=['mechanic','workshop','admin'].includes(profileData.role)?'flex':'none';
+    if(profileData.role==='mechanic') renderMechanicPanel();
+    if(['workshop','admin'].includes(profileData.role)) renderStaffDispatchPanel();
   }
 
 
-  const IDLE_LIMIT_MS = 15 * 60 * 1000;
+  const IDLE_LIMIT_MS = 5 * 60 * 1000;
   function touchActivity(){
     if(!state.user) return;
     state.lastActivity=Date.now();
@@ -102,7 +108,7 @@
     let last=state.lastActivity;
     try{ last=Number(localStorage.getItem('rideon_last_activity'))||last; }catch(e){}
     if(Date.now()-last >= IDLE_LIMIT_MS){
-      toast('Sesi RIDEON berakhir karena tidak aktif selama 15 menit.');
+      toast('Sesi RIDEON berakhir karena tidak aktif selama 5 menit.');
       await performLogout();
     }else{
       touchActivity();
@@ -112,6 +118,7 @@
     if(state.idleBound) return;
     state.idleBound=true;
     ['pointerdown','keydown','touchstart','scroll','mousemove'].forEach(ev=>window.addEventListener(ev,touchActivity,{passive:true}));
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') enforceIdleLogout(); });
     const last=Number(localStorage.getItem('rideon_last_activity'))||0;
     if(last && Date.now()-last >= IDLE_LIMIT_MS){ enforceIdleLogout(); return; }
     touchActivity();
@@ -148,21 +155,13 @@
       b.className='btn danger';
       b.style.width='100%';
       b.style.marginTop='10px';
-      b.textContent='Log out';
+      b.textContent='↪ Log out';
       b.title='Log out of your RIDEON account';
       b.onclick=performLogout;
       side.appendChild(b);
     }
-    const account=document.querySelector('[data-page="account"]');
-    if(account && !$('#logoutAccount')){
-      const host=account.querySelector('.grid') || account;
-      const wrap=document.createElement('div');
-      wrap.className='card';
-      wrap.style.marginTop='16px';
-      wrap.innerHTML='<div class="eyebrow">Security</div><h2 style="margin-top:6px">Account session</h2><p class="muted tiny">Your RIDEON session stays signed in until you choose to log out. Use the button below when you finish using this device.</p><button class="btn danger" id="logoutAccount">Log out of RIDEON</button>';
-      host.appendChild(wrap);
-      $('#logoutAccount').onclick=performLogout;
-    }
+    const accountLogout=$('#accountLogoutBtn');
+    if(accountLogout) accountLogout.onclick=performLogout;
   }
 
   async function handleSession(session){
@@ -391,7 +390,8 @@
     try{
       const r=await fetch('/api/health',{cache:'no-store'}); state.config=await r.json(); if(!r.ok)throw new Error(state.config.error||'Configuration unavailable');
       if(!window.supabase){throw new Error('Supabase browser library did not load.');}
-      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:true,detectSessionInUrl:true}});
+      try{ localStorage.removeItem('rideon_last_activity'); }catch(e){}
       bindProduction();
       const {data}=await state.supabase.auth.getSession(); await handleSession(data.session);
       state.supabase.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>handleSession(session),0)});
