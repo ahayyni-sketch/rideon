@@ -1,6 +1,6 @@
 /* RIDEON V5 production bridge: Supabase Auth/DB + demo payments + live GPS tracking. */
 (() => {
-  const state = { supabase: null, user: null, profile: null, config: null, authMode: 'signin', watchId: null, customerWatchId: null, idleBound: false, trackingRequestId: null, trackingMap: null, mechanicMarker: null, customerMarker: null, trackingChannel: null, workshopMap: null, workshopMarkers: [], rescueMap: null, customerLocation: null, idleTimer: null, lastActivity: 0 };
+  const state = { supabase: null, user: null, profile: null, config: null, authMode: 'signin', watchId: null, customerWatchId: null, idleBound: false, trackingRequestId: null, trackingMap: null, mechanicMarker: null, customerMarker: null, trackingChannel: null, workshopMap: null, workshopMarkers: [], rescueMap: null, customerLocation: null, idleTimer: null, lastActivity: 0, securityInterval: null, loggingOut: false, idleGeneration: 0 };
   const $ = (s) => document.querySelector(s);
   const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const rupiah = (n) => new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n || 0);
@@ -96,56 +96,74 @@
 
 
   const IDLE_LIMIT_MS = 5 * 60 * 1000;
+  const IDLE_CHECK_MS = 1000;
   function touchActivity(){
-    if(!state.user) return;
+    if(!state.user || state.loggingOut) return;
     state.lastActivity=Date.now();
-    try{ localStorage.setItem('rideon_last_activity', String(state.lastActivity)); }catch(e){}
-    clearTimeout(state.idleTimer);
-    state.idleTimer=setTimeout(enforceIdleLogout, IDLE_LIMIT_MS);
+    try{ sessionStorage.setItem('rideon_last_activity', String(state.lastActivity)); }catch(e){}
+    armIdleTimer();
+  }
+  function armIdleTimer(){
+    if(!state.user || state.loggingOut) return;
+    if(state.idleTimer) clearTimeout(state.idleTimer);
+    const generation=++state.idleGeneration;
+    state.idleTimer=setTimeout(async()=>{
+      if(generation!==state.idleGeneration || !state.user || state.loggingOut) return;
+      await performLogout('Sesi berakhir karena 5 menit tidak aktif. Silakan login kembali.');
+    }, IDLE_LIMIT_MS);
   }
   async function enforceIdleLogout(){
-    if(!state.user) return;
+    if(!state.user || state.loggingOut) return;
     let last=state.lastActivity;
-    try{ last=Number(localStorage.getItem('rideon_last_activity'))||last; }catch(e){}
-    if(Date.now()-last >= IDLE_LIMIT_MS){
-      toast('Sesi RIDEON berakhir karena tidak aktif selama 5 menit.');
-      await performLogout();
-    }else{
-      touchActivity();
+    try{ last=Number(sessionStorage.getItem('rideon_last_activity'))||last; }catch(e){}
+    if(last && Date.now()-last >= IDLE_LIMIT_MS){
+      await performLogout('Sesi berakhir karena 5 menit tidak aktif. Silakan login kembali.');
     }
   }
   function startIdleSecurity(){
-    if(state.idleBound) return;
+    stopIdleSecurity();
     state.idleBound=true;
-    ['pointerdown','keydown','touchstart','scroll','mousemove'].forEach(ev=>window.addEventListener(ev,touchActivity,{passive:true}));
+    ['pointerdown','keydown','touchstart','scroll','mousemove','click'].forEach(ev=>window.addEventListener(ev,touchActivity,{passive:true}));
     document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') enforceIdleLogout(); });
-    const last=Number(localStorage.getItem('rideon_last_activity'))||0;
-    if(last && Date.now()-last >= IDLE_LIMIT_MS){ enforceIdleLogout(); return; }
-    touchActivity();
+    state.lastActivity=Date.now();
+    try{ sessionStorage.setItem('rideon_last_activity', String(state.lastActivity)); }catch(e){}
+    armIdleTimer();
+    state.securityInterval=setInterval(enforceIdleLogout, IDLE_CHECK_MS);
   }
   function stopIdleSecurity(){
-    clearTimeout(state.idleTimer); state.idleTimer=null;
+    if(state.securityInterval) clearInterval(state.securityInterval);
+    state.securityInterval=null;
+    if(state.idleTimer) clearTimeout(state.idleTimer);
+    state.idleTimer=null;
+    state.idleGeneration++;
     state.idleBound=false;
-    ['pointerdown','keydown','touchstart','scroll','mousemove'].forEach(ev=>window.removeEventListener(ev,touchActivity));
-    try{ localStorage.removeItem('rideon_last_activity'); }catch(e){}
+    ['pointerdown','keydown','touchstart','scroll','mousemove','click'].forEach(ev=>window.removeEventListener(ev,touchActivity));
+    try{ sessionStorage.removeItem('rideon_last_activity'); }catch(e){}
   }
 
-  async function performLogout(){
+  async function performLogout(message='Anda telah keluar dari akun RIDEON.'){
+    if(state.loggingOut) return;
+    state.loggingOut=true;
     stopIdleSecurity();
     if(state.customerWatchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(state.customerWatchId);state.customerWatchId=null;}
     if(state.watchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(state.watchId);state.watchId=null;}
     try{
-      await state.supabase.auth.signOut();
-    }catch(e){
-      console.error('RIDEON sign out error:', e);
-    }
-    state.user=null;
-    state.profile=null;
+      if(state.supabase) await state.supabase.auth.signOut({scope:'local'});
+    }catch(e){ console.error('RIDEON sign out error:', e); }
     try{
+      sessionStorage.removeItem('rideon_last_activity');
+      Object.keys(localStorage).filter(k=>/^sb-.*-auth-token$/.test(k)).forEach(k=>localStorage.removeItem(k));
       localStorage.removeItem('rideon_session');
     }catch(e){}
-    location.reload();
+    state.user=null; state.profile=null;
+    document.documentElement.classList.add('rideon-auth-boot');
+    document.body.classList.add('auth-loading');
+    const auth=$('#productionAuth'); if(auth) auth.style.display='grid';
+    const msg=$('#authMsg'); if(msg) msg.textContent=message;
+    state.loggingOut=false;
+    setTimeout(()=>location.replace(location.pathname + '?loggedout=1&t=' + Date.now()),50);
   }
+  window.RIDEON_LOGOUT=()=>performLogout();
 
   function addLogout(){
     const side=document.querySelector('.side-bottom');
@@ -157,20 +175,20 @@
       b.style.marginTop='10px';
       b.textContent='↪ Log out';
       b.title='Log out of your RIDEON account';
-      b.onclick=performLogout;
+      b.onclick=(e)=>{e.preventDefault();e.stopPropagation();window.RIDEON_LOGOUT();};
       side.appendChild(b);
     }
     const accountLogout=$('#accountLogoutBtn');
-    if(accountLogout) accountLogout.onclick=performLogout;
+    if(accountLogout){ accountLogout.onclick=(e)=>{e.preventDefault();e.stopPropagation();window.RIDEON_LOGOUT();}; accountLogout.disabled=false; }
   }
 
   async function handleSession(session){
     state.user=session?.user||null;
-    if(!state.user){ stopIdleSecurity(); document.body.classList.add('auth-loading'); $('#productionAuth').style.display='grid'; return; }
+    if(!state.user){ stopIdleSecurity(); document.documentElement.classList.add('rideon-auth-boot'); document.body.classList.add('auth-loading'); const auth=$('#productionAuth'); if(auth) auth.style.display='grid'; return; }
     let lastActivity=0;
-    try{ lastActivity=Number(localStorage.getItem('rideon_last_activity'))||0; }catch(e){}
+    try{ lastActivity=Number(sessionStorage.getItem('rideon_last_activity'))||0; }catch(e){}
     if(lastActivity && Date.now()-lastActivity >= IDLE_LIMIT_MS){ await performLogout(); return; }
-    document.body.classList.remove('auth-loading'); $('#productionAuth').style.display='none';
+    document.documentElement.classList.remove('rideon-auth-boot'); document.body.classList.remove('auth-loading'); $('#productionAuth').style.display='none';
     await loadProfile(); addLogout();
     startIdleSecurity();
     await refreshOrders();
@@ -390,11 +408,13 @@
     try{
       const r=await fetch('/api/health',{cache:'no-store'}); state.config=await r.json(); if(!r.ok)throw new Error(state.config.error||'Configuration unavailable');
       if(!window.supabase){throw new Error('Supabase browser library did not load.');}
-      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:true,detectSessionInUrl:true}});
-      try{ localStorage.removeItem('rideon_last_activity'); }catch(e){}
+      // Fresh-login policy: never restore a previous browser session.
+      try{ Object.keys(localStorage).filter(k=>/^sb-.*-auth-token$/.test(k)).forEach(k=>localStorage.removeItem(k)); sessionStorage.removeItem('rideon_last_activity'); }catch(e){}
+      document.documentElement.classList.add('rideon-auth-boot');
+      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
       bindProduction();
-      const {data}=await state.supabase.auth.getSession(); await handleSession(data.session);
       state.supabase.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>handleSession(session),0)});
+      await handleSession(null);
     }catch(e){ $('#authMsg').textContent=`Setup required: ${e.message}`; console.error(e); }
   }
   window.addEventListener('DOMContentLoaded',init);

@@ -1,6 +1,19 @@
 <!doctype html>
 <html lang="id">
 <head>
+<script>
+(function(){
+  document.documentElement.classList.add('rideon-auth-boot');
+  try {
+    Object.keys(localStorage).filter(function(k){ return /^sb-.*-auth-token$/.test(k); }).forEach(function(k){ localStorage.removeItem(k); });
+    sessionStorage.removeItem('rideon_last_activity');
+  } catch(e) {}
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); }).catch(function(){});
+    if (window.caches) caches.keys().then(function(ks){ ks.filter(function(k){ return /rideon/i.test(k); }).forEach(function(k){ caches.delete(k); }); }).catch(function(){});
+  }
+})();
+</script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3VfYqW2FfM0j0w7fYxYkQf4p7v1c=" crossorigin="">
 <title>RIDEON — Your Ride. Always On.</title>
@@ -13,7 +26,7 @@ main{margin-left:246px;padding:27px 32px 50px;max-width:1600px}.topbar{display:f
 @media(max-width:1050px){.sidebar{width:215px}.main{margin-left:215px;padding:24px 20px}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{grid-template-columns:1fr}.hero h2{max-width:750px}}
 @media(max-width:760px){.sidebar{display:none}main{margin:0;padding:20px 15px 95px}.topbar h1{font-size:25px}.topbar{align-items:flex-start}.top-actions .btn span{display:none}.mobilebar{display:flex;position:fixed;z-index:10;inset:auto 0 0;background:#091512;border-top:1px solid var(--line);justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.mobilebar button{border:0;background:none;color:var(--muted);font-size:10px;display:grid;gap:3px;justify-items:center}.mobilebar button b{font-size:18px;font-weight:500}.mobilebar button.active{color:var(--lime)}.g3{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:1fr}.hero h2{font-size:28px}.card{padding:16px}}
 @media(max-width:460px){.g3,.g4{grid-template-columns:1fr}.topbar h1{font-size:23px}.top-actions{gap:5px}.top-actions .icon-btn{width:38px;height:38px}.hero-main{min-height:300px}.hero .card:last-child{min-height:auto}.product{align-items:flex-start}.product-icon{width:60px;height:60px;flex-basis:60px}.section-head{align-items:flex-start}.actions .btn{flex:1}}
-</style>
+</style>.rideon-auth-boot body > .layout,.rideon-auth-boot body > main,.rideon-auth-boot .layout,.rideon-auth-boot main,.rideon-auth-boot .sidebar,.rideon-auth-boot .mobilebar{visibility:hidden!important}
 
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#08110f">
@@ -132,7 +145,7 @@ main{margin-left:246px;padding:27px 32px 50px;max-width:1600px}.topbar{display:f
   </section>
 
   <section class="page" id="account">
-    <div class="grid g2"><div class="card"><h2>Personal information</h2><form id="profileForm"><div class="field"><label>Full name</label><input id="profileName" value="UCOXX Rider" required></div><div class="field"><label>Email address</label><input id="profileEmail" type="email" value="ucoxx@example.com" required></div><div class="field"><label>Phone number</label><input id="profilePhone" value="0812-0000-0000"></div><button class="btn primary" type="submit">Save profile</button></form></div><div class="card"><h2>Preferences</h2><div class="row"><div><strong>Service reminders</strong><div class="muted tiny">Maintenance and booking updates</div></div><input type="checkbox" checked></div><div class="row"><div><strong>Product updates</strong><div class="muted tiny">Parts, offers and announcements</div></div><input type="checkbox"></div><div class="row"><div><strong>Local data</strong><div class="muted tiny">Your account data is stored in the RIDEON database.</div></div><span class="pill">Local</span></div><div class="actions" style="margin-top:16px"><button class="btn" type="button" onclick="exportData()">Export my data</button><button class="btn danger" type="button" onclick="resetDemo()">Reset local data</button></div><div class="security-note"><span class="pill amber">5-minute security</span><div><strong>Auto logout saat tidak aktif</strong><div class="muted tiny">Jika tidak ada aktivitas selama 5 menit, akun benar-benar di-logout dan login diperlukan lagi.</div></div></div></div><div class="card security-card" style="margin-top:16px"><div class="eyebrow">Account security</div><h2 style="margin-top:6px">Keluar dari akun</h2><p class="muted tiny">Gunakan tombol ini untuk mengakhiri sesi RIDEON sekarang. Jika tidak ada aktivitas selama 5 menit, sesi juga akan diakhiri otomatis.</p><button class="btn danger" id="accountLogoutBtn" type="button">↪ Log out dari akun</button></div></div>
+    <div class="grid g2"><div class="card"><h2>Personal information</h2><form id="profileForm"><div class="field"><label>Full name</label><input id="profileName" value="UCOXX Rider" required></div><div class="field"><label>Email address</label><input id="profileEmail" type="email" value="ucoxx@example.com" required></div><div class="field"><label>Phone number</label><input id="profilePhone" value="0812-0000-0000"></div><button class="btn primary" type="submit">Save profile</button></form></div><div class="card"><h2>Preferences</h2><div class="row"><div><strong>Service reminders</strong><div class="muted tiny">Maintenance and booking updates</div></div><input type="checkbox" checked></div><div class="row"><div><strong>Product updates</strong><div class="muted tiny">Parts, offers and announcements</div></div><input type="checkbox"></div><div class="row"><div><strong>Local data</strong><div class="muted tiny">Your account data is stored in the RIDEON database.</div></div><span class="pill">Local</span></div><div class="actions" style="margin-top:16px"><button class="btn" type="button" onclick="exportData()">Export my data</button><button class="btn danger" type="button" onclick="resetDemo()">Reset local data</button></div><div class="security-note"><span class="pill amber">5-minute security</span><div><strong>Auto logout saat tidak aktif</strong><div class="muted tiny">Jika tidak ada aktivitas selama 5 menit, akun benar-benar di-logout dan login diperlukan lagi.</div></div></div></div><div class="card security-card" style="margin-top:16px"><div class="eyebrow">Account security</div><h2 style="margin-top:6px">Keluar dari akun</h2><p class="muted tiny">Gunakan tombol ini untuk mengakhiri sesi RIDEON sekarang. Jika tidak ada aktivitas selama 5 menit, sesi juga akan diakhiri otomatis.</p><button class="btn danger" id="accountLogoutBtn" type="button" onclick="if(window.RIDEON_LOGOUT) window.RIDEON_LOGOUT();">↪ Log out dari akun</button></div></div>
   </section>
 
   <section class="page" id="ops">
@@ -219,9 +232,8 @@ $('#partSearch').addEventListener('input',renderProducts);$('#partVehicle').addE
 $('#bookDate').min=new Date().toISOString().slice(0,10);
 function init(){renderRecent();renderBikes();renderProducts();renderOrders();renderOps();if(state.profile){$('#profileName').value=state.profile.name;$('#profileEmail').value=state.profile.email;$('#profilePhone').value=state.profile.phone}}
 init();
-if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/production.js"></script>
+<script src="/production.js?v=20261002-login5-final"></script>
 </body></html>
