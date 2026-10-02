@@ -410,16 +410,23 @@
   async function init(){
     injectUI();
     try{
-      const r=await fetch('/api/health',{cache:'no-store'}); state.config=await r.json(); if(!r.ok)throw new Error(state.config.error||'Configuration unavailable');
       if(!window.supabase){throw new Error('Supabase browser library did not load.');}
-      // Fresh-login policy: never restore a previous browser session.
-      try{ Object.keys(localStorage).filter(k=>/^sb-.*-auth-token$/.test(k)).forEach(k=>localStorage.removeItem(k)); sessionStorage.removeItem('rideon_last_activity'); }catch(e){}
+      let cfgResp=await fetch('/api/config',{cache:'no-store'});
+      let cfg={};
+      try{ cfg=await cfgResp.json(); }catch(e){}
+      if(!cfg.supabaseUrl || !cfg.supabaseAnonKey){
+        const healthResp=await fetch('/api/health',{cache:'no-store'});
+        try{ cfg=await healthResp.json(); }catch(e){}
+      }
+      if(!cfg.supabaseUrl || !cfg.supabaseAnonKey){throw new Error(cfg.error||'Supabase configuration is unavailable. Check /api/config and Vercel environment variables.');}
+      state.config=cfg;
+      try{ sessionStorage.removeItem('rideon_last_activity'); }catch(e){}
       document.documentElement.classList.add('rideon-auth-boot');
-      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'rideon-auth-v7'}});
       bindProduction();
       state.supabase.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>handleSession(session),0)});
       await handleSession(null);
-    }catch(e){ $('#authMsg').textContent=`Setup required: ${e.message}`; console.error(e); }
+    }catch(e){ document.documentElement.classList.remove('rideon-auth-boot'); document.body.classList.remove('auth-loading'); const auth=$('#productionAuth'); if(auth) auth.style.display='grid'; const msg=$('#authMsg'); if(msg) msg.textContent=`Setup required: ${e.message}`; console.error(e); }
   }
   window.addEventListener('DOMContentLoaded',init);
 })();

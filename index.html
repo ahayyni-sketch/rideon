@@ -4,10 +4,6 @@
 <script>
 (function(){
   document.documentElement.classList.add('rideon-auth-boot');
-  try {
-    Object.keys(localStorage).filter(function(k){ return /^sb-.*-auth-token$/.test(k); }).forEach(function(k){ localStorage.removeItem(k); });
-    sessionStorage.removeItem('rideon_last_activity');
-  } catch(e) {}
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); }).catch(function(){});
     if (window.caches) caches.keys().then(function(ks){ ks.filter(function(k){ return /rideon/i.test(k); }).forEach(function(k){ caches.delete(k); }); }).catch(function(){});
@@ -235,5 +231,5 @@ init();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/production.js?v=20261002-login6-fixed"></script>
+<script src="/production.js?v=20261002-login7-fixed"></script>
 </body></html>
