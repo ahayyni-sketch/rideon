@@ -145,23 +145,27 @@
     if(state.loggingOut) return;
     state.loggingOut=true;
     stopIdleSecurity();
-    if(state.customerWatchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(state.customerWatchId);state.customerWatchId=null;}
-    if(state.watchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(state.watchId);state.watchId=null;}
+    try{ if(state.customerWatchId!==null && navigator.geolocation) navigator.geolocation.clearWatch(state.customerWatchId); }catch(e){}
+    try{ if(state.watchId!==null && navigator.geolocation) navigator.geolocation.clearWatch(state.watchId); }catch(e){}
+    state.customerWatchId=null; state.watchId=null;
+    try{ if(state.supabase) await state.supabase.auth.signOut({scope:'local'}); }catch(e){ console.error('RIDEON sign out error:',e); }
     try{
-      if(state.supabase) await state.supabase.auth.signOut({scope:'local'});
-    }catch(e){ console.error('RIDEON sign out error:', e); }
-    try{
-      sessionStorage.removeItem('rideon_last_activity');
       Object.keys(localStorage).filter(k=>/^sb-.*-auth-token$/.test(k)).forEach(k=>localStorage.removeItem(k));
       localStorage.removeItem('rideon_session');
+      sessionStorage.clear();
     }catch(e){}
     state.user=null; state.profile=null;
+    const auth=$('#productionAuth'); if(auth) auth.style.display='grid';
     document.documentElement.classList.add('rideon-auth-boot');
     document.body.classList.add('auth-loading');
-    const auth=$('#productionAuth'); if(auth) auth.style.display='grid';
     const msg=$('#authMsg'); if(msg) msg.textContent=message;
+    // Do not reload through the demo app; keep the auth gate in control.
+    state.authMode='signin';
+    if($('#authTitle')) $('#authTitle').textContent='Sign in to RIDEON';
+    if($('#authSubmit')) $('#authSubmit').textContent='Sign in';
+    if($('#authToggle')) $('#authToggle').textContent='Create a new account';
+    if($('#authName')) $('#authName').parentElement.style.display='none';
     state.loggingOut=false;
-    setTimeout(()=>location.replace(location.pathname + '?loggedout=1&t=' + Date.now()),50);
   }
   window.RIDEON_LOGOUT=()=>performLogout();
 
