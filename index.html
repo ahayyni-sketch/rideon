@@ -26,15 +26,15 @@ main{margin-left:246px;padding:27px 32px 50px;max-width:1600px}.topbar{display:f
 @media(max-width:1050px){.sidebar{width:215px}.main{margin-left:215px;padding:24px 20px}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{grid-template-columns:1fr}.hero h2{max-width:750px}}
 @media(max-width:760px){.sidebar{display:none}main{margin:0;padding:20px 15px 95px}.topbar h1{font-size:25px}.topbar{align-items:flex-start}.top-actions .btn span{display:none}.mobilebar{display:flex;position:fixed;z-index:10;inset:auto 0 0;background:#091512;border-top:1px solid var(--line);justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.mobilebar button{border:0;background:none;color:var(--muted);font-size:10px;display:grid;gap:3px;justify-items:center}.mobilebar button b{font-size:18px;font-weight:500}.mobilebar button.active{color:var(--lime)}.g3{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:1fr}.hero h2{font-size:28px}.card{padding:16px}}
 @media(max-width:460px){.g3,.g4{grid-template-columns:1fr}.topbar h1{font-size:23px}.top-actions{gap:5px}.top-actions .icon-btn{width:38px;height:38px}.hero-main{min-height:300px}.hero .card:last-child{min-height:auto}.product{align-items:flex-start}.product-icon{width:60px;height:60px;flex-basis:60px}.section-head{align-items:flex-start}.actions .btn{flex:1}}
-</style>.rideon-auth-boot body > .layout,.rideon-auth-boot body > main,.rideon-auth-boot .layout,.rideon-auth-boot main,.rideon-auth-boot .sidebar,.rideon-auth-boot .mobilebar{visibility:hidden!important}
-
+</style>
+<style id="rideon-auth-boot-css">html.rideon-auth-boot body > .layout,html.rideon-auth-boot body > main,html.rideon-auth-boot .layout,html.rideon-auth-boot main,html.rideon-auth-boot .sidebar,html.rideon-auth-boot .mobilebar{visibility:hidden!important}html.rideon-auth-boot #productionAuth{visibility:visible!important}</style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#08110f">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="RIDEON">
-<style id="rideon-auth-gate-css">html.rideon-auth-boot body > main,html.rideon-auth-boot .layout,html.rideon-auth-boot main,html.rideon-auth-boot .sidebar,html.rideon-auth-boot .mobilebar{visibility:hidden!important}html.rideon-auth-boot #productionAuth{visibility:visible!important}</style></head>
+</head>
 <body>
 <div class="layout">
 <aside class="sidebar">
@@ -235,5 +235,5 @@ init();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/production.js?v=20261002-login5-final"></script>
+<script src="/production.js?v=20261002-login6-fixed"></script>
 </body></html>
