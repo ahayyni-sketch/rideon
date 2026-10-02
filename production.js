@@ -283,6 +283,37 @@
     }
   };
 
+  async function findNearbyWorkshops(){
+    const host=document.querySelector('#workshopList');
+    const mapHost=document.querySelector('#workshopMap');
+    const setHost=(html)=>{if(host)host.innerHTML=html;};
+    if(!navigator.geolocation){setHost('<div class="empty">Browser ini tidak mendukung GPS.</div>');return;}
+    setHost('<div class="empty">Mencari bengkel terdekat…</div>');
+    try{
+      const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:10000,maximumAge:60000}));
+      const lat=pos.coords.latitude,lng=pos.coords.longitude;
+      if(!window.L){setHost('<div class="empty">Peta belum siap. Muat ulang halaman dan coba lagi.</div>');return;}
+      if(state.workshopMap) state.workshopMap.remove();
+      state.workshopMap=L.map('workshopMap').setView([lat,lng],14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.workshopMap);
+      L.marker([lat,lng]).addTo(state.workshopMap).bindPopup('Lokasi Anda').openPopup();
+      state.workshopMarkers=[];
+      const query=`[out:json][timeout:12];(node[shop=motorcycle](around:7000,${lat},${lng});way[shop=motorcycle](around:7000,${lat},${lng});node[shop=car_repair](around:7000,${lat},${lng});way[shop=car_repair](around:7000,${lat},${lng}););out center tags;`;
+      const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'text/plain'},body:query});
+      if(!resp.ok) throw new Error('Pencarian bengkel tidak tersedia saat ini.');
+      const json=await resp.json();
+      const items=(json.elements||[]).map(x=>{const a=x.lat??x.center?.lat,b=x.lon??x.center?.lon,t=x.tags||{};if(a==null||b==null)return null;const d=haversineKm(lat,lng,a,b);const name=t.name||'Bengkel motor terdekat';const hours=t.opening_hours||'';let status='Jam buka tidak tersedia',cls='status-unknown';if(hours){const low=hours.toLowerCase();if(/24\/7|24 hours|00:00-24:00/.test(low)){status='Buka 24 jam';cls='status-open';}else{status='Jam buka tersedia';cls='status-open';}}return {name,lat:a,lng:b,distance:d,hours,status,cls};}).filter(Boolean).sort((a,b)=>a.distance-b.distance).slice(0,10);
+      if(!items.length){setHost('<div class="empty">Belum menemukan bengkel terdekat dari data peta.</div>');state.workshopMap.invalidateSize();return;}
+      items.forEach(w=>{const m=L.marker([w.lat,w.lng]).addTo(state.workshopMap).bindPopup(`<strong>${esc(w.name)}</strong><br>${w.distance.toFixed(1)} km dari Anda`);state.workshopMarkers.push(m);});
+      setHost(items.map(w=>`<div class="workshop-item"><div><strong>${esc(w.name)}</strong><div class="meta">${w.distance.toFixed(1)} km · <span class="${w.cls}">${esc(w.status)}</span></div></div><button class="btn small" type="button" onclick="window.open('https://www.openstreetmap.org/?mlat=${w.lat}&mlon=${w.lng}#map=18/${w.lat}/${w.lng}','_blank')">Map</button></div>`).join('');
+      state.workshopMap.invalidateSize();
+    }catch(e){
+      console.error('findNearbyWorkshops:',e);
+      setHost(`<div class="empty">${esc(e.message||'Gagal mencari bengkel. Izinkan GPS lalu coba lagi.')}</div>`);
+    }
+  }
+  function haversineKm(lat1,lon1,lat2,lon2){const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
+
   window.findNearbyWorkshops=findNearbyWorkshops;
   window.useMyLocation=async function(){
     const hint=$('#locationHint');
@@ -422,7 +453,7 @@
       state.config=cfg;
       try{ sessionStorage.removeItem('rideon_last_activity'); }catch(e){}
       document.documentElement.classList.add('rideon-auth-boot');
-      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'rideon-auth-v7'}});
+      state.supabase=window.supabase.createClient(state.config.supabaseUrl,state.config.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'rideon-auth-v8'}});
       bindProduction();
       state.supabase.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>handleSession(session),0)});
       await handleSession(null);
