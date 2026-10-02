@@ -1,6 +1,6 @@
 /* RIDEON V5 production bridge: Supabase Auth/DB + demo payments + live GPS tracking. */
 (() => {
-  const state = { supabase: null, user: null, profile: null, config: null, authMode: 'signin', watchId: null, trackingRequestId: null, trackingMap: null, mechanicMarker: null, customerMarker: null, trackingChannel: null };
+  const state = { supabase: null, user: null, profile: null, config: null, authMode: 'signin', watchId: null, customerWatchId: null, idleBound: false, trackingRequestId: null, trackingMap: null, mechanicMarker: null, customerMarker: null, trackingChannel: null, workshopMap: null, workshopMarkers: [], rescueMap: null, customerLocation: null, idleTimer: null, lastActivity: 0 };
   const $ = (s) => document.querySelector(s);
   const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const rupiah = (n) => new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n || 0);
@@ -70,11 +70,15 @@
     const {data,error}=await state.supabase.from('profiles').select('*').eq('id',state.user.id).single();
     if(error){ console.error(error); return; }
     state.profile=data;
-    const name=data.full_name||'RIDEON Rider';
-    const avatar=(name[0]||'R').toUpperCase();
+    const name=data.full_name||state.user.user_metadata?.full_name||'RIDEON Rider';
+    const avatar=(name.trim()[0]||'R').toUpperCase();
+    const firstName=name.trim().split(/\s+/)[0]||'Rider';
     document.querySelectorAll('.profile strong').forEach(x=>x.textContent=name);
     document.querySelectorAll('.profile small').forEach(x=>x.textContent=`${data.role} · ${state.user.email}`);
     document.querySelectorAll('.avatar').forEach(x=>x.textContent=avatar);
+    if($('#welcomeName')) $('#welcomeName').textContent=name;
+    const homeTitle=$('#pageTitle');
+    if(homeTitle && document.querySelector('#home.page.active')) homeTitle.innerHTML=`Welcome back, <span id="welcomeName">${esc(name)}</span>.`;
     if($('#profileName')) $('#profileName').value=name;
     if($('#profileEmail')) $('#profileEmail').value=state.user.email||'';
     if($('#profilePhone')) $('#profilePhone').value=data.phone||'';
@@ -84,7 +88,45 @@
     if(['workshop','admin'].includes(data.role)) renderStaffDispatchPanel();
   }
 
+
+  const IDLE_LIMIT_MS = 15 * 60 * 1000;
+  function touchActivity(){
+    if(!state.user) return;
+    state.lastActivity=Date.now();
+    try{ localStorage.setItem('rideon_last_activity', String(state.lastActivity)); }catch(e){}
+    clearTimeout(state.idleTimer);
+    state.idleTimer=setTimeout(enforceIdleLogout, IDLE_LIMIT_MS);
+  }
+  async function enforceIdleLogout(){
+    if(!state.user) return;
+    let last=state.lastActivity;
+    try{ last=Number(localStorage.getItem('rideon_last_activity'))||last; }catch(e){}
+    if(Date.now()-last >= IDLE_LIMIT_MS){
+      toast('Sesi RIDEON berakhir karena tidak aktif selama 15 menit.');
+      await performLogout();
+    }else{
+      touchActivity();
+    }
+  }
+  function startIdleSecurity(){
+    if(state.idleBound) return;
+    state.idleBound=true;
+    ['pointerdown','keydown','touchstart','scroll','mousemove'].forEach(ev=>window.addEventListener(ev,touchActivity,{passive:true}));
+    const last=Number(localStorage.getItem('rideon_last_activity'))||0;
+    if(last && Date.now()-last >= IDLE_LIMIT_MS){ enforceIdleLogout(); return; }
+    touchActivity();
+  }
+  function stopIdleSecurity(){
+    clearTimeout(state.idleTimer); state.idleTimer=null;
+    state.idleBound=false;
+    ['pointerdown','keydown','touchstart','scroll','mousemove'].forEach(ev=>window.removeEventListener(ev,touchActivity));
+    try{ localStorage.removeItem('rideon_last_activity'); }catch(e){}
+  }
+
   async function performLogout(){
+    stopIdleSecurity();
+    if(state.customerWatchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(state.customerWatchId);state.customerWatchId=null;}
+    if(state.watchId!==null && navigator.geolocation){navigator.geolocation.clearWatch(state.watchId);state.watchId=null;}
     try{
       await state.supabase.auth.signOut();
     }catch(e){
@@ -125,11 +167,17 @@
 
   async function handleSession(session){
     state.user=session?.user||null;
-    if(!state.user){ document.body.classList.add('auth-loading'); $('#productionAuth').style.display='grid'; return; }
+    if(!state.user){ stopIdleSecurity(); document.body.classList.add('auth-loading'); $('#productionAuth').style.display='grid'; return; }
+    let lastActivity=0;
+    try{ lastActivity=Number(localStorage.getItem('rideon_last_activity'))||0; }catch(e){}
+    if(lastActivity && Date.now()-lastActivity >= IDLE_LIMIT_MS){ await performLogout(); return; }
     document.body.classList.remove('auth-loading'); $('#productionAuth').style.display='none';
     await loadProfile(); addLogout();
+    startIdleSecurity();
     await refreshOrders();
+    await renderConsultHistory();
     await hydrateActiveRoadside();
+    await renderSupportInbox();
   }
 
   async function refreshOrders(){
@@ -190,16 +238,36 @@
   window.requestRescue=async function(){
     if(!state.user){toast('Please sign in first.');return;}
     const issue=$('#rescueIssue').value, phone=$('#rescuePhone').value.trim(), address=$('#rescueLocation').value.trim();
+    if(!phone){toast('Masukkan nomor kontak terlebih dahulu.');return;}
     let lat=null,lng=null,accuracy_m=null;
     try{
-      const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:12000,maximumAge:5000}));
+      const pos=await captureRescuePosition(false);
       lat=pos.coords.latitude;lng=pos.coords.longitude;accuracy_m=pos.coords.accuracy;
-    }catch(e){ if(!address){toast('Allow GPS or enter a location/landmark.');return;} }
+    }catch(e){ if(!address){toast('Izinkan GPS atau isi lokasi/landmark secara manual.');return;} }
     const {data,error}=await state.supabase.from('roadside_requests').insert({customer_id:state.user.id,issue,phone,address_text:address,lat,lng,accuracy_m}).select().single();
     if(error){toast(error.message);return;}
+    state.trackingRequestId=data.id;
     const order=await createOrder('roadside',data.id,'Roadside assistance',35000);
-    $('#rescueStatus').textContent='Requested'; $('#locationHint').textContent=lat?`GPS locked: ${lat.toFixed(5)}, ${lng.toFixed(5)} ±${Math.round(accuracy_m)}m`:'Location text saved.';
-    toast('Mechanic request sent. No real payment is required.'); subscribeToTracking(data.id); renderLiveTracking(data.id);
+    $('#rescueStatus').textContent='Request sent'; $('#rescueStatus').className='pill';
+    $('#locationHint').textContent=lat?`GPS terkunci: ${lat.toFixed(5)}, ${lng.toFixed(5)} ±${Math.round(accuracy_m)}m`:'Lokasi teks tersimpan.';
+    $('#rescueSteps').innerHTML='<div class="step active"><div class="step-dot">✓</div><div><strong>Permintaan diterima</strong><small>Referensi: '+data.id.slice(0,8)+'</small></div></div><div class="step"><div class="step-dot">2</div><div><strong>Menunggu mekanik ditugaskan</strong><small>Workshop dapat melihat lokasi GPS yang kamu kirim.</small></div></div><div class="step"><div class="step-dot">3</div><div><strong>Live tracking</strong><small>Posisi mekanik muncul setelah mekanik mengaktifkan GPS.</small></div></div>';
+    toast('Permintaan roadside terkirim.');
+    subscribeToTracking(data.id); renderLiveTracking(data.id);
+    if(lat && navigator.geolocation && state.customerWatchId===null){
+      state.customerWatchId=navigator.geolocation.watchPosition(async p=>{
+        state.customerLocation={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};
+        initRescueMap(p.coords.latitude,p.coords.longitude);
+        await state.supabase.from('roadside_requests').update({lat:p.coords.latitude,lng:p.coords.longitude,accuracy_m:p.coords.accuracy}).eq('id',data.id).eq('customer_id',state.user.id);
+      },()=>{}, {enableHighAccuracy:true,maximumAge:3000,timeout:15000});
+    }
+  };
+
+  window.findNearbyWorkshops=findNearbyWorkshops;
+  window.useMyLocation=async function(){
+    const hint=$('#locationHint');
+    if(hint)hint.textContent='Meminta izin GPS…';
+    try{ await captureRescuePosition(false); toast('Lokasi GPS berhasil diambil.'); }
+    catch(e){ if(hint)hint.textContent='Izin lokasi tidak diberikan. Masukkan lokasi manual.'; toast('GPS tidak tersedia atau izin ditolak.'); }
   };
 
   async function hydrateActiveRoadside(){
@@ -265,15 +333,56 @@
   }
   function stopMechanicTracking(){ if(state.watchId!==null){navigator.geolocation.clearWatch(state.watchId);state.watchId=null;} if($('#mechanicGpsStatus'))$('#mechanicGpsStatus').textContent='GPS sharing stopped.'; }
 
+
+  async function renderConsultHistory(){
+    const host=$('#consultHistory'); if(!host||!state.user)return;
+    const {data,error}=await state.supabase.from('support_messages').select('*').eq('customer_id',state.user.id).order('created_at',{ascending:false}).limit(10);
+    if(error){host.innerHTML='<div class="empty">Riwayat konsultasi belum tersedia.</div>';return;}
+    if(!data?.length){host.innerHTML='<div class="empty">Belum ada konsultasi.</div>';return;}
+    host.innerHTML=data.map(x=>{
+      const status=x.status==='resolved'?'Selesai':x.status==='in_progress'?'Sedang ditangani':'Menunggu CS';
+      return `<div class="row"><div><strong>${esc(x.category)}</strong><div class="muted tiny">${new Date(x.created_at).toLocaleString('id-ID')} · ${status}</div><div class="muted tiny">${esc(x.message)}</div>${x.staff_reply?`<div style="margin-top:6px"><span class="pill">Balasan CS</span><div class="muted tiny">${esc(x.staff_reply)}</div></div>`:''}</div><span class="pill ${x.status==='resolved'?'':'amber'}">${status}</span></div>`;
+    }).join('');
+  }
+  async function submitConsultation(e){
+    e.preventDefault();
+    if(!state.user){toast('Silakan login terlebih dahulu.');return;}
+    const payload={customer_id:state.user.id,motorcycle:$('#consultBike').value,category:$('#consultCategory').value,message:$('#consultText').value.trim(),urgency:$('#consultUrgency').value};
+    if(!payload.message)return;
+    const {error}=await state.supabase.from('support_messages').insert(payload);
+    if(error){toast(error.message);return;}
+    e.target.reset(); await renderConsultHistory(); toast('Konsultasi terkirim ke Customer Service RIDEON.');
+  }
+  async function renderSupportInbox(){
+    const ops=$('#ops'); if(!ops || !['mechanic','workshop','admin'].includes(state.profile?.role) || $('#supportInbox'))return;
+    const div=document.createElement('div'); div.id='supportInbox'; div.className='card'; div.style.marginTop='16px';
+    div.innerHTML=`<div class="eyebrow">Customer service</div><h2 style="margin-top:6px">Consultation inbox</h2><div id="supportInboxBody" class="table-wrap"><div class="empty">Loading…</div></div>`;
+    ops.appendChild(div);
+    const {data,error}=await state.supabase.from('support_messages').select('*,profiles:customer_id(full_name,phone)').order('created_at',{ascending:false}).limit(50);
+    const body=$('#supportInboxBody');
+    if(error){body.innerHTML=`<div class="empty">${esc(error.message)}</div>`;return;}
+    body.innerHTML=(data||[]).map(x=>`<div class="row" style="align-items:flex-start"><div><strong>${esc(x.profiles?.full_name||'Customer')}</strong><div class="muted tiny">${new Date(x.created_at).toLocaleString('id-ID')} · ${esc(x.category)} · ${esc(x.urgency)}</div><div style="margin-top:5px">${esc(x.message)}</div>${x.staff_reply?`<div class="muted tiny" style="margin-top:5px">Balasan: ${esc(x.staff_reply)}</div>`:''}</div><div style="min-width:170px"><select data-support-status="${x.id}" style="width:100%;background:#081410;border:1px solid #29453b;color:#f3f7f4;border-radius:9px;padding:7px"><option value="new" ${x.status==='new'?'selected':''}>Menunggu</option><option value="in_progress" ${x.status==='in_progress'?'selected':''}>Sedang ditangani</option><option value="resolved" ${x.status==='resolved'?'selected':''}>Selesai</option></select><textarea data-support-reply="${x.id}" placeholder="Balasan CS" style="width:100%;margin-top:6px;min-height:55px;background:#081410;border:1px solid #29453b;color:#f3f7f4;border-radius:9px;padding:7px">${esc(x.staff_reply||'')}</textarea><button class="btn small primary" data-support-save="${x.id}" style="margin-top:6px">Simpan</button></div></div>`).join('')||'<div class="empty">Belum ada konsultasi.</div>';
+    body.querySelectorAll('[data-support-save]').forEach(b=>b.onclick=async()=>{
+      const id=b.dataset.supportSave, status=body.querySelector(`[data-support-status="${id}"]`).value, staff_reply=body.querySelector(`[data-support-reply="${id}"]`).value.trim();
+      const {error:e}=await state.supabase.from('support_messages').update({status,staff_reply}).eq('id',id);
+      if(e)toast(e.message);else{toast('Balasan CS tersimpan.');renderSupportInbox();}
+    });
+  }
+
   function bindProduction(){
     document.addEventListener('submit',e=>{
       if(e.target?.id==='bookingForm'){e.preventDefault();e.stopImmediatePropagation();onBookingSubmit(e.target);}
       if(e.target?.id==='profileForm'){e.preventDefault();e.stopImmediatePropagation();saveProfile();}
+      if(e.target?.id==='consultForm'){e.preventDefault();e.stopImmediatePropagation();submitConsultation(e.target);}
     },true);
-
+    document.addEventListener('click',e=>{
+      const btn=e.target.closest('[data-page]');
+      if(!btn)return;
+      if(btn.dataset.page==='booking') setTimeout(()=>{findNearbyWorkshops(); if(state.workshopMap)state.workshopMap.invalidateSize();},250);
+      if(btn.dataset.page==='rescue') setTimeout(()=>{if(state.rescueMap)state.rescueMap.invalidateSize();},250);
+      if(btn.dataset.page==='consult') setTimeout(renderConsultHistory,50);
+    },true);
     const host=document.querySelector('#rescue .grid.g2 > div:last-child'); if(host && !$('#liveTrackingHost')){const d=document.createElement('div');d.id='liveTrackingHost';host.appendChild(d);}
-    const accountNav=document.querySelector('[data-page="account"]');
-    if(accountNav){/* existing page navigation handles this */}
   }
   async function saveProfile(){ const full_name=$('#profileName').value.trim(), phone=$('#profilePhone').value.trim(); const {error}=await state.supabase.from('profiles').update({full_name,phone}).eq('id',state.user.id); if(error)toast(error.message);else{toast('Profile saved.');loadProfile();} }
 

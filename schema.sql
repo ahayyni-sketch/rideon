@@ -70,6 +70,21 @@ create table if not exists public.mechanic_locations (
 
 create index if not exists mechanic_locations_request_time_idx on public.mechanic_locations(roadside_request_id, recorded_at desc);
 
+create table if not exists public.support_messages (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.profiles(id) on delete cascade,
+  motorcycle text,
+  category text not null,
+  message text not null,
+  urgency text not null default 'normal' check (urgency in ('normal','soon','unsafe')),
+  status text not null default 'new' check (status in ('new','in_progress','resolved')),
+  staff_reply text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists support_messages_customer_time_idx on public.support_messages(customer_id, created_at desc);
+
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid not null references public.profiles(id) on delete cascade,
@@ -111,6 +126,8 @@ drop trigger if exists roadside_updated_at on public.roadside_requests;
 create trigger roadside_updated_at before update on public.roadside_requests for each row execute function public.set_updated_at();
 drop trigger if exists orders_updated_at on public.orders;
 create trigger orders_updated_at before update on public.orders for each row execute function public.set_updated_at();
+drop trigger if exists support_messages_updated_at on public.support_messages;
+create trigger support_messages_updated_at before update on public.support_messages for each row execute function public.set_updated_at();
 
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public
@@ -141,6 +158,7 @@ alter table public.roadside_requests enable row level security;
 alter table public.mechanic_locations enable row level security;
 alter table public.orders enable row level security;
 alter table public.payment_events enable row level security;
+alter table public.support_messages enable row level security;
 
 drop policy if exists profiles_self on public.profiles;
 create policy profiles_self on public.profiles for select using (id = auth.uid() or public.is_staff());
@@ -162,6 +180,8 @@ drop policy if exists roadside_customer_select on public.roadside_requests;
 create policy roadside_customer_select on public.roadside_requests for select using (customer_id = auth.uid() or public.is_staff());
 drop policy if exists roadside_customer_insert on public.roadside_requests;
 create policy roadside_customer_insert on public.roadside_requests for insert with check (customer_id = auth.uid());
+drop policy if exists roadside_customer_update on public.roadside_requests;
+create policy roadside_customer_update on public.roadside_requests for update using (customer_id = auth.uid()) with check (customer_id = auth.uid());
 drop policy if exists roadside_staff_update on public.roadside_requests;
 create policy roadside_staff_update on public.roadside_requests for update using (public.is_staff()) with check (public.is_staff());
 
@@ -181,6 +201,13 @@ create policy orders_customer_insert on public.orders for insert with check (cus
 drop policy if exists orders_customer_update on public.orders;
 create policy orders_customer_update on public.orders for update using (customer_id = auth.uid()) with check (customer_id = auth.uid());
 
+drop policy if exists support_customer_select on public.support_messages;
+create policy support_customer_select on public.support_messages for select using (customer_id = auth.uid() or public.is_staff());
+drop policy if exists support_customer_insert on public.support_messages;
+create policy support_customer_insert on public.support_messages for insert with check (customer_id = auth.uid());
+drop policy if exists support_staff_update on public.support_messages;
+create policy support_staff_update on public.support_messages for update using (public.is_staff()) with check (public.is_staff());
+
 -- Payment events are server-only; no client policy intentionally.
 
 -- Realtime: use Postgres Changes for the initial implementation. For high-volume tracking,
@@ -190,6 +217,7 @@ do $$ begin
   begin alter publication supabase_realtime add table public.mechanic_locations; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.bookings; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.orders; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.support_messages; exception when duplicate_object then null; end;
 end $$;
 
 -- Optional: make a mechanic account manually after the user signs up:
