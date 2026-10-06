@@ -222,3 +222,21 @@ end $$;
 
 -- Optional: make a mechanic account manually after the user signs up:
 -- update public.profiles set role='mechanic' where id='USER_UUID';
+
+
+-- V10 customer/staff chat
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references auth.users(id) on delete cascade,
+  staff_id uuid references auth.users(id) on delete set null,
+  sender_role text not null default 'customer' check (sender_role in ('customer','staff')),
+  message text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.chat_messages enable row level security;
+drop policy if exists chat_customer_select on public.chat_messages;
+create policy chat_customer_select on public.chat_messages for select using (customer_id = auth.uid() or public.is_staff());
+drop policy if exists chat_customer_insert on public.chat_messages;
+create policy chat_customer_insert on public.chat_messages for insert with check (customer_id = auth.uid() and sender_role = 'customer');
+drop policy if exists chat_staff_insert on public.chat_messages;
+create policy chat_staff_insert on public.chat_messages for insert with check (public.is_staff() and sender_role = 'staff' and staff_id = auth.uid());

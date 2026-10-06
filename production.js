@@ -1,6 +1,6 @@
 /* RIDEON V5 production bridge: Supabase Auth/DB + demo payments + live GPS tracking. */
 (() => {
-  const state = { supabase: null, user: null, profile: null, config: null, authMode: 'signin', watchId: null, customerWatchId: null, idleBound: false, trackingRequestId: null, trackingMap: null, mechanicMarker: null, customerMarker: null, trackingChannel: null, workshopMap: null, workshopMarkers: [], rescueMap: null, customerLocation: null, idleTimer: null, lastActivity: 0, securityInterval: null, loggingOut: false, idleGeneration: 0 };
+  const state = { supabase: null, user: null, profile: null, config: null, authMode: 'signin', watchId: null, customerWatchId: null, idleBound: false, trackingRequestId: null, trackingMap: null, mechanicMarker: null, customerMarker: null, trackingChannel: null, chatChannel: null, activeChatTicket: null, workshopMap: null, workshopMarkers: [], rescueMap: null, customerLocation: null, idleTimer: null, lastActivity: 0, securityInterval: null, loggingOut: false, idleGeneration: 0 };
   const $ = (s) => document.querySelector(s);
   const esc = (v) => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const rupiah = (n) => new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n || 0);
@@ -186,6 +186,94 @@
     if(accountLogout){ accountLogout.onclick=(e)=>{e.preventDefault();e.stopPropagation();window.RIDEON_LOGOUT();}; accountLogout.disabled=false; }
   }
 
+
+  async function loadCustomerVehicles(){
+    if(!state.user || !state.supabase)return;
+    const {data,error}=await state.supabase.from('vehicles').select('id,brand,model,plate_number,year,notes,created_at').eq('owner_id',state.user.id).order('created_at',{ascending:true});
+    if(error){console.warn('vehicle load',error);return;}
+    state.customerVehicles=data||[];
+    renderCustomerVehicleUI();
+  }
+
+  function vehicleLabel(v){return `${v.brand||''} ${v.model||''}`.trim()||'Motorcycle';}
+  function vehicleDetail(v){return `${v.plate_number||'No plate'} · ${v.year||'Year not set'}`;}
+
+  function renderCustomerVehicleUI(){
+    const vehicles=state.customerVehicles||[];
+    const primary=vehicles[0]||null;
+    const home=$('#homePrimaryVehicle');
+    if(home){
+      if(primary){
+        home.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin:13px 0"><div><h2 style="margin:0 0 3px">${esc(vehicleLabel(primary))}</h2><div class="muted tiny">${esc(vehicleDetail(primary))}</div></div><span class="pill">REGISTERED</span></div><div class="stat">${primary.notes?.match(/(\d[\d,.]*)\s*km/i)?.[1]||'—'} <span class="muted" style="font-size:12px;font-weight:600">km</span></div><div class="statrow"><span class="muted">Next maintenance</span><strong>Based on service record</strong></div><div class="statrow"><span class="muted">Last service</span><strong>No service yet</strong></div><button class="btn small" style="margin-top:12px" onclick="go('garage')">View motorcycle details →</button>`;
+      }else{
+        home.innerHTML=`<div class="empty" style="padding:30px 10px"><div style="font-size:32px;margin-bottom:8px">🏍️</div><strong>No motorcycle registered yet</strong><div class="muted tiny" style="margin-top:6px">Add your bike in My Garage to see mileage, maintenance and service history.</div><button class="btn small primary" style="margin-top:12px" onclick="openModal('addBike')">＋ Add motorcycle</button></div>`;
+      }
+    }
+    const pill=$('#garageStatusPill'); const title=$('#homeHeroTitle'); const text=$('#homeHeroText');
+    if(pill) pill.innerHTML=vehicles.length?'● GARAGE READY':'● START WITH YOUR GARAGE';
+    if(title) title.innerHTML=vehicles.length?'Every ride.<br>One less worry.':'Your garage.<br>Start here.';
+    if(text) text.textContent=vehicles.length?'Your motorcycle, service booking, roadside support and parts are connected in one place.':'Register your first motorcycle to unlock personalized service booking, maintenance tracking and fitment-aware shopping.';
+    const book=$('#bookBike'); if(book){book.innerHTML=vehicles.length?vehicles.map(v=>`<option value="${v.id}">${esc(vehicleLabel(v))} · ${esc(v.plate_number||'No plate')}</option>`).join(''):'<option value="">No motorcycle registered yet</option>';}
+    const hint=$('#bookBikeHint'); if(hint) hint.textContent=vehicles.length?'Select a registered motorcycle. RIDEON will attach the booking to its service record.':'Register a motorcycle in My Garage before booking a service.';
+    const rescue=$('#rescueVehicle'); if(rescue){rescue.innerHTML='<option value="">I have not registered a motorcycle</option>'+vehicles.map(v=>`<option value="${v.id}">${esc(vehicleLabel(v))} · ${esc(v.plate_number||'No plate')}</option>`).join('');}
+    const consult=$('#consultBike'); if(consult){consult.innerHTML=vehicles.length?vehicles.map(v=>`<option value="${v.id}">${esc(vehicleLabel(v))} · ${esc(v.plate_number||'No plate')}</option>`).join(''):'<option value="">No motorcycle registered yet</option>'}
+    const garageList=$('#bikeList');
+    if(garageList){garageList.innerHTML=vehicles.length?vehicles.map((v,i)=>`<div class="row"><div style="display:flex;gap:11px;align-items:center"><div class="product-icon" style="width:54px;height:54px;flex-basis:54px;font-size:25px">🏍️</div><div><strong>${esc(vehicleLabel(v))}</strong><div class="muted tiny">${esc(vehicleDetail(v))}</div><span class="pill">Registered</span></div></div><button class="btn small" onclick="setPrimaryCustomerVehicle('${v.id}')">${i===0?'Primary':'Use as primary'}</button></div>`).join(''):'<div class="empty"><div style="font-size:34px;margin-bottom:8px">🏍️</div><strong>Your garage is empty</strong><div class="muted tiny" style="margin-top:6px">Register your motorcycle once. RIDEON will use it for booking, roadside requests and service history.</div></div>'}
+    const overview=$('#garageOverview');
+    if(overview){overview.innerHTML=primary?`<h2 style="margin-top:8px">${esc(vehicleLabel(primary))}</h2><div class="muted tiny">${esc(vehicleDetail(primary))}</div><div class="divider"></div><div class="statrow"><span class="muted">Service history</span><span class="pill">No history yet</span></div><div class="statrow"><span class="muted">Maintenance</span><span class="pill blue">Ready to track</span></div><p class="muted tiny">RIDEON does not invent mileage or past services. Records appear after you register and use the service.</p><button class="btn primary" onclick="go('booking')">Book first service</button>`:'<div class="empty">Add a motorcycle to unlock maintenance tracking.</div>'}
+  }
+
+  window.setPrimaryCustomerVehicle=async function(id){
+    if(!state.user)return;
+    const {data,error}=await state.supabase.from('vehicles').select('*').eq('id',id).eq('owner_id',state.user.id).single();
+    if(error||!data)return toast(error?.message||'Vehicle not found.');
+    const others=(state.customerVehicles||[]).filter(v=>v.id!==id);
+    state.customerVehicles=[data,...others]; renderCustomerVehicleUI(); toast('Primary motorcycle updated.');
+  };
+
+  async function saveCustomerVehicle(form){
+    const brand=$('#newBikeBrand')?.value.trim(), model=$('#newBikeModel')?.value.trim(), plate=$('#newBikePlate')?.value.trim(), year=Number($('#newBikeYear')?.value)||null, km=$('#newBikeKm')?.value.trim();
+    if(!brand||!model)return toast('Please enter the motorcycle brand and model.');
+    const notes=km?`Odometer: ${km}`:'';
+    const {data,error}=await state.supabase.from('vehicles').insert({owner_id:state.user.id,brand,model,plate_number:plate||null,year,notes}).select().single();
+    if(error)return toast(error.message);
+    closeModal(); toast(`${vehicleLabel(data)} added to your garage.`); await loadCustomerVehicles();
+  }
+
+  async function onBookingSubmitV11(form){
+    if(!state.user)return toast('Please sign in first.');
+    const vehicleId=$('#bookBike').value, service=$('#bookType').value, date=$('#bookDate').value, time=$('#bookTime').value, notes=$('#bookNotes').value;
+    if(!vehicleId)return toast('Register a motorcycle first in My Garage.');
+    if(!date)return toast('Choose a service date.');
+    const scheduled=`${date}T${time.split('–')[0]}:00+07:00`;
+    const {data:b,error}=await state.supabase.from('bookings').insert({customer_id:state.user.id,vehicle_id:vehicleId,service_type:service,scheduled_at:scheduled,notes,status:'pending'}).select().single();
+    if(error)return toast(error.message);
+    const prices={'Periodic service':100000,'Oil change':75000,'Brake inspection':50000,'Electrical diagnosis':75000,'Tire / puncture repair':50000,'Other repair':100000};
+    try{await createOrder('service',b.id,`${service} · ${$('#bookBike').selectedOptions[0]?.text||'Motorcycle'}`,prices[service]||100000);}catch(e){console.warn(e);}
+    toast(`Service booking ${b.id.slice(0,8)} created.`); await refreshOrders(); await loadServiceHistory();
+  }
+
+  async function requestRescueV11(){
+    if(!state.user)return toast('Please sign in first.');
+    const issue=$('#rescueIssue').value, phone=$('#rescuePhone').value.trim(), address=$('#rescueLocation').value.trim(), vehicleId=$('#rescueVehicle')?.value||null;
+    if(!phone)return toast('Enter a contact number first.');
+    let lat=null,lng=null,accuracy_m=null;
+    try{const pos=await captureRescuePosition(false);lat=pos.coords.latitude;lng=pos.coords.longitude;accuracy_m=pos.coords.accuracy;}catch(e){if(!address){toast('Allow GPS or enter a location/landmark.');return;}}
+    const {data,error}=await state.supabase.from('roadside_requests').insert({customer_id:state.user.id,vehicle_id:vehicleId,issue,phone,address_text:address,lat,lng,accuracy_m}).select().single();
+    if(error)return toast(error.message);
+    try{await createOrder('roadside',data.id,'Roadside assistance',35000);}catch(e){console.warn(e);}
+    $('#rescueStatus').textContent='Request sent';$('#rescueStatus').className='pill';
+    if(lat&&lng){const maps=`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;const a=$('#rescueGoogleMaps');if(a)a.href=maps;$('#locationHint').innerHTML=`GPS locked: ${lat.toFixed(5)}, ${lng.toFixed(5)} ±${Math.round(accuracy_m)}m · <a href="${maps}" target="_blank" rel="noopener" style="color:#c5f36a">Open in Google Maps</a>`;}
+    $('#rescueSteps').innerHTML='<div class="step active"><div class="step-dot">✓</div><div><strong>Request received</strong><small>Reference: '+data.id.slice(0,8)+'</small></div></div><div class="step"><div class="step-dot">2</div><div><strong>Workshop dispatch</strong><small>RIDEON will review the request and assign an available mechanic.</small></div></div><div class="step"><div class="step-dot">3</div><div><strong>Live tracking</strong><small>Mechanic location appears when the assigned mechanic starts GPS sharing.</small></div></div>';
+    toast('Roadside request sent.');subscribeToTracking(data.id);renderLiveTracking(data.id);
+  }
+
+  window.useMyLocation=function(){
+    const hint=$('#locationHint'); if(!navigator.geolocation){if(hint)hint.textContent='Geolocation is not supported.';return;}
+    if(hint)hint.textContent='Requesting your location…';
+    navigator.geolocation.getCurrentPosition(pos=>{const {latitude,longitude}=pos.coords;$('#rescueLocation').value=`GPS ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;const maps=`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;const a=$('#rescueGoogleMaps');if(a)a.href=maps;if(hint)hint.innerHTML=`Location captured · <a href="${maps}" target="_blank" rel="noopener" style="color:#c5f36a">Open in Google Maps</a>`;initRescueMap(latitude,longitude);},err=>{if(hint)hint.textContent='Location permission was not granted. Enter a street or landmark manually.';},{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+  };
+
   async function handleSession(session){
     state.user=session?.user||null;
     if(!state.user){ stopIdleSecurity(); document.documentElement.classList.add('rideon-auth-boot'); document.body.classList.add('auth-loading'); const auth=$('#productionAuth'); if(auth) auth.style.display='grid'; return; }
@@ -194,11 +282,15 @@
     if(lastActivity && Date.now()-lastActivity >= IDLE_LIMIT_MS){ await performLogout(); return; }
     document.documentElement.classList.remove('rideon-auth-boot'); document.body.classList.remove('auth-loading'); $('#productionAuth').style.display='none';
     await loadProfile(); addLogout();
+    await loadCustomerVehicles();
     startIdleSecurity();
     await refreshOrders();
     await renderConsultHistory();
     await hydrateActiveRoadside();
     await renderSupportInbox();
+    await renderChatInbox();
+    await renderCustomerChat();
+    await loadServiceHistory();
   }
 
   async function refreshOrders(){
@@ -298,14 +390,14 @@
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(state.workshopMap);
       L.marker([lat,lng]).addTo(state.workshopMap).bindPopup('Lokasi Anda').openPopup();
       state.workshopMarkers=[];
-      const query=`[out:json][timeout:12];(node[shop=motorcycle](around:7000,${lat},${lng});way[shop=motorcycle](around:7000,${lat},${lng});node[shop=car_repair](around:7000,${lat},${lng});way[shop=car_repair](around:7000,${lat},${lng}););out center tags;`;
+      const query=`[out:json][timeout:12];(node[shop=motorcycle](around:7000,${lat},${lng});way[shop=motorcycle](around:7000,${lat},${lng}););out center tags;`;
       const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'text/plain'},body:query});
       if(!resp.ok) throw new Error('Pencarian bengkel tidak tersedia saat ini.');
       const json=await resp.json();
       const items=(json.elements||[]).map(x=>{const a=x.lat??x.center?.lat,b=x.lon??x.center?.lon,t=x.tags||{};if(a==null||b==null)return null;const d=haversineKm(lat,lng,a,b);const name=t.name||'Bengkel motor terdekat';const hours=t.opening_hours||'';let status='Jam buka tidak tersedia',cls='status-unknown';if(hours){const low=hours.toLowerCase();if(/24\/7|24 hours|00:00-24:00/.test(low)){status='Buka 24 jam';cls='status-open';}else{status='Jam buka tersedia';cls='status-open';}}return {name,lat:a,lng:b,distance:d,hours,status,cls};}).filter(Boolean).sort((a,b)=>a.distance-b.distance).slice(0,10);
       if(!items.length){setHost('<div class="empty">Belum menemukan bengkel terdekat dari data peta.</div>');state.workshopMap.invalidateSize();return;}
       items.forEach(w=>{const m=L.marker([w.lat,w.lng]).addTo(state.workshopMap).bindPopup(`<strong>${esc(w.name)}</strong><br>${w.distance.toFixed(1)} km dari Anda`);state.workshopMarkers.push(m);});
-      setHost(items.map(w=>{const mapUrl='https://www.openstreetmap.org/?mlat='+w.lat+'&mlon='+w.lng+'#map=18/'+w.lat+'/'+w.lng;return `<div class="workshop-item"><div><strong>${esc(w.name)}</strong><div class="meta">${w.distance.toFixed(1)} km · <span class="${w.cls}">${esc(w.status)}</span></div></div><a class="btn small" href="${mapUrl}" target="_blank" rel="noopener">Map</a></div>`;}).join(''));
+      setHost(items.map(w=>{const mapUrl='https://www.google.com/maps/search/?api=1&query='+w.lat+','+w.lng;return `<div class="workshop-item"><div><strong>${esc(w.name)}</strong><div class="meta">${w.distance.toFixed(1)} km · <span class="${w.cls}">${esc(w.status)}</span></div></div><a class="btn small" href="${mapUrl}" target="_blank" rel="noopener">Google Maps</a></div>`;}).join(''));
       state.workshopMap.invalidateSize();
     }catch(e){
       console.error('findNearbyWorkshops:',e);
@@ -368,7 +460,7 @@
 
   function renderMechanicPanel(){
     const ops=$('#ops'); if(!ops || $('#mechanicPanel'))return;
-    const div=document.createElement('div'); div.id='mechanicPanel'; div.className='card'; div.style.marginTop='16px'; div.innerHTML=`<div class="eyebrow">Mechanic mode</div><h2 style="margin-top:6px">Live GPS sharing</h2><p class="muted">Enter the assigned roadside request ID. The customer's RIDEON screen will receive your location in real time while sharing is active.</p><div class="grid g2"><div class="field"><label>Roadside request ID</label><input id="mechanicRequestId" placeholder="UUID from the assigned job"></div><div class="form-actions" style="align-items:end"><button class="btn primary" id="startGps">Start live tracking</button><button class="btn danger" id="stopGps">Stop</button></div></div><div id="mechanicGpsStatus" class="muted tiny"></div>`; ops.appendChild(div);
+    const div=document.createElement('div'); div.id='mechanicPanel'; div.className='card'; div.style.marginTop='16px'; div.innerHTML=`<div class="eyebrow">Mechanic mode</div><h2 style="margin-top:6px">Live GPS sharing</h2><p class="muted">Enter the assigned roadside request ID. The customer's RIDEON screen will receive your location in real time while sharing is active.</p><div class="grid g2"><div class="field"><label>Roadside request ID</label><input id="mechanicRequestId" placeholder="UUID from the assigned job"></div><div class="form-actions" style="align-items:end"><button class="btn primary" id="startGps">Start live tracking</button><button class="btn danger" id="stopGps">Stop</button></div></div><div id="mechanicGpsStatus" class="muted tiny"></div><div class="divider"></div><div class="eyebrow">Assigned roadside jobs</div><div id="mechanicJobs" class="list"><div class="empty">Loading jobs…</div></div>`; ops.appendChild(div); renderMechanicJobs();
     $('#startGps').onclick=startMechanicTracking; $('#stopGps').onclick=stopMechanicTracking;
   }
   async function startMechanicTracking(){
@@ -417,24 +509,104 @@
     body.querySelectorAll('[data-support-save]').forEach(b=>b.onclick=async()=>{
       const id=b.dataset.supportSave, status=body.querySelector(`[data-support-status="${id}"]`).value, staff_reply=body.querySelector(`[data-support-reply="${id}"]`).value.trim();
       const {error:e}=await state.supabase.from('support_messages').update({status,staff_reply}).eq('id',id);
-      if(e)toast(e.message);else{toast('Balasan CS tersimpan.');renderSupportInbox();}
+      if(e)toast(e.message);else{toast('Balasan CS tersimpan.');renderSupportInbox();renderChatInbox();}
     });
+  }
+
+  async function loadServiceHistory(){
+    if(!state.user)return;
+    const table=$('#serviceHistoryTable');
+    if(!table)return;
+    table.innerHTML='<tr><td colspan="5" class="empty">Loading service history…</td></tr>';
+    const {data,error}=await state.supabase.from('bookings').select('*').eq('customer_id',state.user.id).order('scheduled_at',{ascending:false}).limit(100);
+    if(error){table.innerHTML=`<tr><td colspan="5" class="empty">${esc(error.message)}</td></tr>`;return;}
+    const vehicleIds=[...(new Set((data||[]).map(x=>x.vehicle_id).filter(Boolean)))];
+    let vehicles=[];
+    if(vehicleIds.length){const r=await state.supabase.from('vehicles').select('id,brand,model,plate').in('id',vehicleIds);vehicles=r.data||[];}
+    const vm=new Map(vehicles.map(v=>[v.id,`${v.brand||''} ${v.model||''}`.trim()||v.plate||'Motorcycle']));
+    table.innerHTML=(data||[]).map(b=>`<tr><td>${new Date(b.scheduled_at).toLocaleString('id-ID')}</td><td>${esc(vm.get(b.vehicle_id)||'Motorcycle')}</td><td>${esc(b.service_type||'Service')}</td><td>RIDEON Central Workshop</td><td>${statusPill((b.status||'pending').replace('_',' '))}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Belum ada service history.</td></tr>';
+    const rr=await state.supabase.from('roadside_requests').select('id').eq('customer_id',state.user.id); if($('#roadsideHistoryCount'))$('#roadsideHistoryCount').textContent=`${rr.data?.length||0} requests`;
+    const oo=await state.supabase.from('orders').select('id').eq('customer_id',state.user.id).eq('kind','parts'); if($('#partsHistoryCount'))$('#partsHistoryCount').textContent=`${oo.data?.length||0} orders`;
+  }
+
+  async function renderCustomerChat(){
+    const host=$('#chatThread'); if(!host||!state.user)return;
+    const {data,error}=await state.supabase.from('chat_messages').select('*').eq('customer_id',state.user.id).order('created_at',{ascending:true}).limit(100);
+    if(error){host.innerHTML='<div class="empty">Chat belum tersedia. Jalankan SUPPORT_MIGRATION.sql untuk mengaktifkan fitur chat.</div>';return;}
+    if(!data?.length){host.innerHTML='<div class="empty">Belum ada pesan. Kirim pesan pertama untuk memulai chat dengan RIDEON.</div>';return;}
+    host.innerHTML=data.map(m=>`<div class="row" style="align-items:flex-start"><div><strong>${m.sender_role==='customer'?'You':'RIDEON Staff'}</strong><div class="muted tiny">${new Date(m.created_at).toLocaleString('id-ID')}</div><div style="margin-top:4px">${esc(m.message)}</div></div><span class="pill ${m.sender_role==='customer'?'':'blue'}">${m.sender_role==='customer'?'Sent':'Reply'}</span></div>`).join('');
+    host.scrollTop=host.scrollHeight;
+  }
+
+  async function submitChat(e){
+    e.preventDefault();
+    const text=$('#chatText')?.value.trim(); if(!text||!state.user)return;
+    const {error}=await state.supabase.from('chat_messages').insert({customer_id:state.user.id,sender_role:'customer',message:text});
+    if(error){toast(error.message.includes('chat_messages')?'Chat requires SUPPORT_MIGRATION.sql to be run in Supabase.':error.message);return;}
+    $('#chatText').value=''; await renderCustomerChat(); toast('Message sent to RIDEON Customer Service.');
+  }
+
+  async function openNotifications(){
+    if(!state.user)return;
+    const [b,r,o,c]=await Promise.all([
+      state.supabase.from('bookings').select('service_type,status,scheduled_at').eq('customer_id',state.user.id).order('created_at',{ascending:false}).limit(5),
+      state.supabase.from('roadside_requests').select('issue,status,created_at').eq('customer_id',state.user.id).order('created_at',{ascending:false}).limit(5),
+      state.supabase.from('orders').select('kind,description,payment_status,created_at').eq('customer_id',state.user.id).order('created_at',{ascending:false}).limit(5),
+      state.supabase.from('support_messages').select('category,status,staff_reply,created_at').eq('customer_id',state.user.id).order('created_at',{ascending:false}).limit(5)
+    ]);
+    const items=[];
+    (b.data||[]).forEach(x=>items.push({title:`Booking · ${x.service_type}`,text:`${new Date(x.scheduled_at).toLocaleString('id-ID')} · ${x.status}`,tag:'Booking'}));
+    (r.data||[]).forEach(x=>items.push({title:'Roadside assistance',text:`${x.issue} · ${x.status}`,tag:'Roadside'}));
+    (o.data||[]).forEach(x=>items.push({title:'Order update',text:`${x.description||x.kind} · ${x.payment_status||'pending'}`,tag:'Order'}));
+    (c.data||[]).filter(x=>x.staff_reply).forEach(x=>items.push({title:'Customer Service reply',text:x.staff_reply,tag:'CS'}));
+    items.sort((a,b)=>String(b.text).localeCompare(String(a.text)));
+    openModal('notifications');
+    $('#modalTitle').textContent='Notifications';
+    $('#modalBody').innerHTML=items.slice(0,10).map(x=>`<div class="row"><div><strong>${esc(x.title)}</strong><div class="muted tiny">${esc(x.text)}</div></div><span class="pill amber">${esc(x.tag)}</span></div>`).join('')||'<div class="empty">No new notifications yet.</div>';
+  }
+  window.RIDEON_NOTIFICATIONS=openNotifications;
+
+  async function renderMechanicJobs(){
+    const host=$('#mechanicJobs'); if(!host||!state.user)return;
+    const {data,error}=await state.supabase.from('roadside_requests').select('*').eq('assigned_mechanic_id',state.user.id).in('status',['accepted','en_route','arrived','in_service']).order('created_at',{ascending:false}).limit(20);
+    if(error){host.innerHTML=`<div class="empty">${esc(error.message)}</div>`;return;}
+    host.innerHTML=(data||[]).map(r=>`<div class="row"><div><strong>${esc(r.issue)}</strong><div class="muted tiny">${esc(r.address_text||'GPS location available')} · ${esc(r.phone||'')}</div><div class="muted tiny">${r.id}</div></div><div class="actions"><span class="pill blue">${esc(r.status)}</span><button class="btn small" data-mech-request="${r.id}">Track</button></div></div>`).join('')||'<div class="empty">No assigned roadside jobs.</div>';
+    host.querySelectorAll('[data-mech-request]').forEach(b=>b.onclick=()=>{const i=$('#mechanicRequestId');if(i)i.value=b.dataset.mechRequest;toast('Request selected. Start live tracking when you are ready.');});
+  }
+
+  async function renderChatInbox(){
+    const ops=$('#ops'); if(!ops||!['mechanic','workshop','admin'].includes(state.profile?.role))return;
+    let box=$('#chatInbox');
+    if(!box){box=document.createElement('div');box.id='chatInbox';box.className='card';box.style.marginTop='16px';ops.appendChild(box);}
+    box.innerHTML='<div class="eyebrow">Customer chat</div><h2 style="margin-top:6px">Live customer messages</h2><div id="chatInboxBody" class="list"><div class="empty">Loading…</div></div>';
+    const {data,error}=await state.supabase.from('chat_messages').select('*').order('created_at',{ascending:false}).limit(100);
+    const body=$('#chatInboxBody');
+    if(error){body.innerHTML=`<div class="empty">Chat inbox unavailable. Run SUPPORT_MIGRATION.sql if needed.</div>`;return;}
+    const groups={}; (data||[]).forEach(m=>{(groups[m.customer_id]??=[]).push(m);});
+    const ids=Object.keys(groups);
+    if(!ids.length){body.innerHTML='<div class="empty">No customer messages yet.</div>';return;}
+    body.innerHTML=ids.map(cid=>{const msgs=groups[cid].slice().reverse();const last=msgs[msgs.length-1];return `<div class="card" style="background:#0b1915;margin-bottom:10px"><div class="row"><div><strong>Customer ${esc(cid.slice(0,8))}</strong><div class="muted tiny">${new Date(last.created_at).toLocaleString('id-ID')}</div></div><span class="pill blue">${msgs.length} messages</span></div><div class="list" style="margin-top:8px;max-height:180px;overflow:auto">${msgs.slice(-8).map(m=>`<div class="row" style="align-items:flex-start"><div><strong>${m.sender_role==='customer'?'Customer':'RIDEON Staff'}</strong><div>${esc(m.message)}</div></div><div class="muted tiny">${new Date(m.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')}</div><div style="display:flex;gap:8px;margin-top:8px"><input data-chat-reply="${cid}" placeholder="Reply to customer" style="flex:1;background:#081410;border:1px solid #29453b;color:#f3f7f4;border-radius:9px;padding:9px"><button class="btn small primary" data-chat-send="${cid}">Send</button></div></div>`;}).join('');
+    body.querySelectorAll('[data-chat-send]').forEach(btn=>btn.onclick=async()=>{const cid=btn.dataset.chatSend;const input=body.querySelector(`[data-chat-reply="${cid}"]`);const message=input.value.trim();if(!message)return;const {error:e}=await state.supabase.from('chat_messages').insert({customer_id:cid,staff_id:state.user.id,sender_role:'staff',message});if(e)toast(e.message);else{input.value='';toast('Reply sent.');renderChatInbox();}});
   }
 
   function bindProduction(){
     document.addEventListener('submit',e=>{
-      if(e.target?.id==='bookingForm'){e.preventDefault();e.stopImmediatePropagation();onBookingSubmit(e.target);}
+      if(e.target?.id==='bookingForm'){e.preventDefault();e.stopImmediatePropagation();onBookingSubmitV11(e.target);}
+      if(e.target?.id==='addBikeForm'){e.preventDefault();e.stopImmediatePropagation();saveCustomerVehicle(e.target);}
       if(e.target?.id==='profileForm'){e.preventDefault();e.stopImmediatePropagation();saveProfile();}
       if(e.target?.id==='consultForm'){e.preventDefault();e.stopImmediatePropagation();submitConsultation(e.target);}
+      if(e.target?.id==='chatForm'){e.preventDefault();e.stopImmediatePropagation();submitChat(e);}
     },true);
     document.addEventListener('click',e=>{
       const btn=e.target.closest('[data-page]');
       if(!btn)return;
       if(btn.dataset.page==='booking') setTimeout(()=>{findNearbyWorkshops(); if(state.workshopMap)state.workshopMap.invalidateSize();},250);
       if(btn.dataset.page==='rescue') setTimeout(()=>{if(state.rescueMap)state.rescueMap.invalidateSize();},250);
-      if(btn.dataset.page==='consult') setTimeout(renderConsultHistory,50);
+      if(btn.dataset.page==='consult') setTimeout(()=>{renderConsultHistory();renderCustomerChat();},50);
+      if(btn.dataset.page==='history') setTimeout(loadServiceHistory,50);
     },true);
     const host=document.querySelector('#rescue .grid.g2 > div:last-child'); if(host && !$('#liveTrackingHost')){const d=document.createElement('div');d.id='liveTrackingHost';host.appendChild(d);}
+    window.requestRescue=requestRescueV11;
   }
   async function saveProfile(){ const full_name=$('#profileName').value.trim(), phone=$('#profilePhone').value.trim(); const {error}=await state.supabase.from('profiles').update({full_name,phone}).eq('id',state.user.id); if(error)toast(error.message);else{toast('Profile saved.');loadProfile();} }
 
