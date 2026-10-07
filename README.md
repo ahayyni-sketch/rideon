@@ -17,3 +17,11 @@ No new database migration is required for these V11 customer UI changes beyond t
 
 ## Product image note
 Images are linked to manufacturer/retailer-hosted product assets. Because remote assets can change or disappear, RIDEON should eventually host licensed product images in its own storage/CDN.
+
+
+## V11.1 bug-fix notes
+- `loadServiceHistory()` is exposed globally for the inline Service History controls.
+- Nearby workshop discovery now uses the same-origin `/api/workshops` serverless proxy, so the browser no longer calls Overpass directly and does not hit Overpass CORS restrictions.
+- Product images use the same-origin `/api/product-image` proxy with an inline fallback, avoiding third-party CORP/CORS image failures.
+- The stale demo notification text mentioning a Vario/booking was removed; notifications now come from real Supabase data.
+- Run `SUPPORT_MIGRATION.sql` once in Supabase SQL Editor before using customer chat.

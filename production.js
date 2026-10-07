@@ -391,7 +391,7 @@
       L.marker([lat,lng]).addTo(state.workshopMap).bindPopup('Lokasi Anda').openPopup();
       state.workshopMarkers=[];
       const query=`[out:json][timeout:12];(node[shop=motorcycle](around:7000,${lat},${lng});way[shop=motorcycle](around:7000,${lat},${lng}););out center tags;`;
-      const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'text/plain'},body:query});
+      const resp=await fetch('/api/workshops?lat='+encodeURIComponent(lat)+'&lng='+encodeURIComponent(lng)+'&radius=7000',{method:'GET',headers:{'Accept':'application/json'},cache:'no-store'});
       if(!resp.ok) throw new Error('Pencarian bengkel tidak tersedia saat ini.');
       const json=await resp.json();
       const items=(json.elements||[]).map(x=>{const a=x.lat??x.center?.lat,b=x.lon??x.center?.lon,t=x.tags||{};if(a==null||b==null)return null;const d=haversineKm(lat,lng,a,b);const name=t.name||'Bengkel motor terdekat';const hours=t.opening_hours||'';let status='Jam buka tidak tersedia',cls='status-unknown';if(hours){const low=hours.toLowerCase();if(/24\/7|24 hours|00:00-24:00/.test(low)){status='Buka 24 jam';cls='status-open';}else{status='Jam buka tersedia';cls='status-open';}}return {name,lat:a,lng:b,distance:d,hours,status,cls};}).filter(Boolean).sort((a,b)=>a.distance-b.distance).slice(0,10);
@@ -407,6 +407,7 @@
   function haversineKm(lat1,lon1,lat2,lon2){const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
 
   window.findNearbyWorkshops=findNearbyWorkshops;
+  window.loadServiceHistory=loadServiceHistory;
   window.useMyLocation=async function(){
     const hint=$('#locationHint');
     if(hint)hint.textContent='Meminta izin GPS…';
