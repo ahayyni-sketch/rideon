@@ -1,6 +1,6 @@
 {
   "name": "RIDEON — Your Ride. Always On.",
-  "short_name": "RIDEON",
+  "short_name": "R",
   "description": "Motorcycle service, roadside assistance, consultations and parts in one app.",
   "lang": "id-ID",
   "start_url": "./",
@@ -8,6 +8,6 @@
   "background_color": "#08110f",
   "theme_color": "#08110f",
   "icons": [
-    {"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+    {"src":"rideon-mark.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
   ]
 }

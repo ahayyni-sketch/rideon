@@ -10,14 +10,14 @@
     const login = document.createElement('div');
     state.authMode = 'signin';
     login.id='productionAuth';
-    login.innerHTML=`<div class="prod-auth-card"><div class="brand"><div class="logo">R</div><div>RIDEON</div></div><div class="tagline" style="margin:5px 0 20px">YOUR RIDE. ALWAYS ON.</div><h2 id="authTitle">Sign in to RIDEON</h2><p class="muted" id="authSub">Use your real account. Your account, bookings, vehicles and orders are stored securely.</p><div class="field"><label>Full name (for new account)</label><input id="authName" placeholder="Your full name"></div><div class="field"><label>Email</label><input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></div><div class="field"><label>Password</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Minimum 6 characters"></div><button class="btn primary" id="authSubmit" style="width:100%">Sign in</button><button class="btn ghost" id="authToggle" style="width:100%;margin-top:8px">Create a new account</button><div class="muted tiny" id="authMsg" style="margin-top:12px"></div></div>`;
+    login.innerHTML=`<div class="prod-auth-card"><div class="brand brand-mark-only" style="justify-content:center;margin-bottom:8px"><img class="logo logo-img" src="/rideon-mark.svg" alt="R"/></div><div class="tagline" style="margin:5px 0 20px;text-align:center">YOUR RIDE. ALWAYS ON.</div><h2 id="authTitle">Sign in</h2><p class="muted" id="authSub">Use your real account. Your account, bookings, vehicles and orders are stored securely.</p><div class="field"><label>Full name (for new account)</label><input id="authName" placeholder="Your full name"></div><div class="field"><label>Email</label><input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></div><div class="field"><label>Password</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Minimum 6 characters"></div><button class="btn primary" id="authSubmit" style="width:100%">Sign in</button><button class="btn ghost" id="authToggle" style="width:100%;margin-top:8px">Create a new account</button><div class="muted tiny" id="authMsg" style="margin-top:12px"></div></div>`;
     document.body.appendChild(login);
     const style=document.createElement('style'); style.textContent=`#productionAuth{position:fixed;inset:0;background:#06100ddd;backdrop-filter:blur(12px);display:grid;place-items:center;padding:20px;z-index:100}.prod-auth-card{width:min(460px,100%);background:#10211b;border:1px solid #29453b;border-radius:24px;padding:28px;box-shadow:0 30px 100px #0009}.prod-auth-card .brand{padding:0}.prod-auth-card .logo{display:grid}.prod-auth-card .field{margin-top:12px}.prod-auth-card .tagline{font-size:9px;letter-spacing:1.25px;color:#9aafa5}.prod-auth-card h2{margin:4px 0 8px}.prod-auth-card input{background:#081410;border:1px solid #29453b;color:#f3f7f4;border-radius:11px;padding:12px;width:100%}body.auth-loading main,body.auth-loading .sidebar,body.auth-loading .mobilebar{visibility:hidden}.prod-live{border:1px solid #29453b;background:#0b1915;border-radius:15px;padding:14px;margin-top:14px}.live-map{height:320px;border-radius:14px;overflow:hidden;border:1px solid #29453b;background:#10231c}.live-badge{display:inline-flex;gap:7px;align-items:center;border-radius:999px;padding:5px 9px;background:#20372b;color:#c5f36a;font-size:10px;font-weight:850}.live-dot{width:7px;height:7px;border-radius:50%;background:#c5f36a;box-shadow:0 0 0 4px #c5f36a22}`; document.head.appendChild(style);
     document.body.classList.add('auth-loading');
     $('#authToggle').onclick=()=>{
       state.authMode = state.authMode === 'signin' ? 'signup' : 'signin';
       const signup = state.authMode === 'signup';
-      $('#authTitle').textContent = signup ? 'Create your RIDEON account' : 'Sign in to RIDEON';
+      $('#authTitle').textContent = signup ? 'Create your account' : 'Sign in';
       $('#authSub').textContent = signup ? 'Create an account to store your data permanently.' : 'Use your real account. Your account, bookings, vehicles and orders are stored securely.';
       $('#authSubmit').textContent = signup ? 'Sign up' : 'Sign in';
       $('#authToggle').textContent = signup ? 'I already have an account' : 'Create a new account';
@@ -162,7 +162,7 @@
     const msg=$('#authMsg'); if(msg) msg.textContent=message;
     // Do not reload through the demo app; keep the auth gate in control.
     state.authMode='signin';
-    if($('#authTitle')) $('#authTitle').textContent='Sign in to RIDEON';
+    if($('#authTitle')) $('#authTitle').textContent='Sign in';
     if($('#authSubmit')) $('#authSubmit').textContent='Sign in';
     if($('#authToggle')) $('#authToggle').textContent='Create a new account';
     if($('#authName')) $('#authName').parentElement.style.display='none';
@@ -430,7 +430,7 @@
       if(!resp.ok) throw new Error('Pencarian bengkel tidak tersedia saat ini.');
       const json=await resp.json();
       const items=(json.elements||[]).map(x=>{const a=x.lat??x.center?.lat,b=x.lon??x.center?.lon,t=x.tags||{};if(a==null||b==null)return null;const d=haversineKm(lat,lng,a,b);const name=t.name||'Bengkel motor terdekat';const hours=t.opening_hours||'';let status='Jam buka tidak tersedia',cls='status-unknown';if(hours){const low=hours.toLowerCase();if(/24\/7|24 hours|00:00-24:00/.test(low)){status='Buka 24 jam';cls='status-open';}else{status='Jam buka tersedia';cls='status-open';}}return {name,lat:a,lng:b,distance:d,hours,status,cls};}).filter(Boolean).sort((a,b)=>a.distance-b.distance).slice(0,10);
-      if(!items.length){const fallback=json.fallbackUrl||('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(lat+','+lng+' bengkel motor'));const message=json.message||'Belum ada data bengkel dari penyedia peta saat ini.';setHost('<div class="empty">'+esc(message)+'<div style="margin-top:12px"><a class="btn small" href="'+fallback+'" target="_blank" rel="noopener">Cari bengkel di Google Maps</a></div></div>');state.workshopMap.invalidateSize();return;}
+      if(!items.length){setHost('<div class="empty">Belum menemukan bengkel terdekat dari data peta.</div>');state.workshopMap.invalidateSize();return;}
       items.forEach(w=>{const m=L.marker([w.lat,w.lng]).addTo(state.workshopMap).bindPopup(`<strong>${esc(w.name)}</strong><br>${w.distance.toFixed(1)} km dari Anda`);state.workshopMarkers.push(m);});
       setHost(items.map(w=>{const mapUrl='https://www.google.com/maps/search/?api=1&query='+w.lat+','+w.lng;return `<div class="workshop-item"><div><strong>${esc(w.name)}</strong><div class="meta">${w.distance.toFixed(1)} km · <span class="${w.cls}">${esc(w.status)}</span></div></div><a class="btn small" href="${mapUrl}" target="_blank" rel="noopener">Google Maps</a></div>`;}).join(''));
       state.workshopMap.invalidateSize();
