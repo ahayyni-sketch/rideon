@@ -92,6 +92,7 @@
     const opsBtn=document.querySelector('[data-page="ops"]'); if(opsBtn) opsBtn.style.display=['mechanic','workshop','admin'].includes(profileData.role)?'flex':'none';
     if(profileData.role==='mechanic') renderMechanicPanel();
     if(['workshop','admin'].includes(profileData.role)) renderStaffDispatchPanel();
+    if(['mechanic','workshop','admin'].includes(profileData.role)) setTimeout(renderV12Operations,120);
   }
 
 
@@ -168,6 +169,7 @@
     state.loggingOut=false;
   }
   window.RIDEON_LOGOUT=()=>performLogout();
+  window.renderV12Operations=renderV12Operations;
 
   function addLogout(){
     const side=document.querySelector('.side-bottom');
@@ -336,17 +338,50 @@
 
   window.checkout=async function(){
     try{
-      const saved=JSON.parse(localStorage.getItem('rideonStartupDemo')||'{}');
-      const cart=Array.isArray(saved.cart)?saved.cart:[];
+      if(!state.user)return toast('Please sign in first.');
+      const cart=Array.isArray(state.cart)?state.cart:[];
       if(!cart.length)return toast('Cart is empty.');
       const total=cart.reduce((sum,p)=>sum+(Number(p.price)||0)*(Number(p.qty)||0),0);
       const names=cart.map(p=>`${p.name} × ${p.qty}`).join(', ');
       const order=await createOrder('parts',null,names,total);
-      saved.cart=[]; localStorage.setItem('rideonStartupDemo',JSON.stringify(saved));
+      const items=cart.map(p=>({order_id:order.id,product_key:p.id,product_name:p.name,brand:p.brand||null,quantity:Number(p.qty)||1,unit_price_idr:Number(p.price)||0,subtotal_idr:(Number(p.price)||0)*(Number(p.qty)||0)}));
+      const {error:itemError}=await state.supabase.from('order_items').insert(items);
+      if(itemError)throw itemError;
+      state.cart=[];
+      if(typeof save==='function')save();
       closeModal?.(); updateCartCount?.(); await refreshOrders(); go?.('orders');
-      toast('Parts order created. No real payment is required.');
+      toast('Parts order created. Demo checkout only — no real payment is charged.');
     }catch(e){toast(e.message)}
   };
+
+  async function renderV12Operations(){
+    const ops=$('#ops');
+    if(!ops || !['mechanic','workshop','admin'].includes(state.profile?.role)) return;
+    let panel=$('#v12Operations');
+    if(!panel){
+      panel=document.createElement('div'); panel.id='v12Operations'; panel.className='card'; panel.style.marginTop='16px'; ops.appendChild(panel);
+    }
+    panel.innerHTML=`<div class="section-head" style="margin:0 0 14px"><div><div class="eyebrow">RIDEON V12 · ${esc(state.profile.role)}</div><h2 style="margin-top:5px">Business dashboard</h2></div><button class="btn small" id="v12Refresh">↻ Refresh</button></div>
+      <div class="grid g4"><div class="card"><div class="eyebrow">Pending bookings</div><div class="stat" id="v12Bookings">—</div></div><div class="card"><div class="eyebrow">Roadside active</div><div class="stat" id="v12Roadside">—</div></div><div class="card"><div class="eyebrow">Parts orders</div><div class="stat" id="v12Parts">—</div></div><div class="card"><div class="eyebrow">Inventory items</div><div class="stat" id="v12Inventory">—</div></div></div>
+      <div class="grid g2" style="margin-top:16px"><div><h3>Recent service queue</h3><div id="v12Queue" class="list"><div class="empty">Loading…</div></div></div><div><h3>Inventory</h3><div id="v12InventoryList" class="list"><div class="empty">Loading…</div></div></div></div>`;
+    $('#v12Refresh').onclick=renderV12Operations;
+    const [bk,rs,ord,inv]=await Promise.all([
+      state.supabase.from('bookings').select('id,service_type,status,scheduled_at,customer_id,vehicle_id').in('status',['pending','confirmed','in_progress']).order('scheduled_at',{ascending:true}).limit(20),
+      state.supabase.from('roadside_requests').select('id,issue,status,created_at,assigned_mechanic_id').in('status',['requested','accepted','en_route','arrived','in_service']).order('created_at',{ascending:false}).limit(20),
+      state.supabase.from('orders').select('id,kind,description,amount_idr,payment_status,created_at').eq('kind','parts').order('created_at',{ascending:false}).limit(20),
+      state.supabase.from('inventory_items').select('*').order('updated_at',{ascending:false}).limit(20)
+    ]);
+    if(bk.error||rs.error||ord.error||inv.error){panel.insertAdjacentHTML('beforeend',`<div class="muted tiny" style="margin-top:12px">V12 data migration may be required: ${esc((bk.error||rs.error||ord.error||inv.error)?.message||'Unknown error')}</div>`);return;}
+    $('#v12Bookings').textContent=bk.data?.length||0; $('#v12Roadside').textContent=rs.data?.length||0; $('#v12Parts').textContent=ord.data?.length||0; $('#v12Inventory').textContent=inv.data?.length||0;
+    $('#v12Queue').innerHTML=(bk.data||[]).slice(0,8).map(x=>`<div class="row"><div><strong>${esc(x.service_type)}</strong><div class="muted tiny">${new Date(x.scheduled_at).toLocaleString('id-ID')}</div></div><span class="pill amber">${esc(x.status)}</span></div>`).join('')||'<div class="empty">No active bookings.</div>';
+    $('#v12InventoryList').innerHTML=(inv.data||[]).slice(0,8).map(x=>`<div class="row"><div><strong>${esc(x.name)}</strong><div class="muted tiny">${esc(x.brand||'')} · ${x.stock_qty} in stock · min ${x.reorder_level}</div></div><span class="pill ${Number(x.stock_qty)<=Number(x.reorder_level)?'amber':''}">${Number(x.stock_qty)<=Number(x.reorder_level)?'Reorder':'OK'}</span></div>`).join('')||'<div class="empty">No inventory items yet.</div>';
+  }
+
+  async function renderV12CustomerOrders(){
+    if(!state.user)return;
+    const host=$('#ordersTable'); if(!host)return;
+    await refreshOrders();
+  }
 
   window.requestRescue=async function(){
     if(!state.user){toast('Please sign in first.');return;}
@@ -395,7 +430,7 @@
       if(!resp.ok) throw new Error('Pencarian bengkel tidak tersedia saat ini.');
       const json=await resp.json();
       const items=(json.elements||[]).map(x=>{const a=x.lat??x.center?.lat,b=x.lon??x.center?.lon,t=x.tags||{};if(a==null||b==null)return null;const d=haversineKm(lat,lng,a,b);const name=t.name||'Bengkel motor terdekat';const hours=t.opening_hours||'';let status='Jam buka tidak tersedia',cls='status-unknown';if(hours){const low=hours.toLowerCase();if(/24\/7|24 hours|00:00-24:00/.test(low)){status='Buka 24 jam';cls='status-open';}else{status='Jam buka tersedia';cls='status-open';}}return {name,lat:a,lng:b,distance:d,hours,status,cls};}).filter(Boolean).sort((a,b)=>a.distance-b.distance).slice(0,10);
-      if(!items.length){setHost('<div class="empty">Belum menemukan bengkel terdekat dari data peta.</div>');state.workshopMap.invalidateSize();return;}
+      if(!items.length){const fallback=json.fallbackUrl||('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(lat+','+lng+' bengkel motor'));const message=json.message||'Belum ada data bengkel dari penyedia peta saat ini.';setHost('<div class="empty">'+esc(message)+'<div style="margin-top:12px"><a class="btn small" href="'+fallback+'" target="_blank" rel="noopener">Cari bengkel di Google Maps</a></div></div>');state.workshopMap.invalidateSize();return;}
       items.forEach(w=>{const m=L.marker([w.lat,w.lng]).addTo(state.workshopMap).bindPopup(`<strong>${esc(w.name)}</strong><br>${w.distance.toFixed(1)} km dari Anda`);state.workshopMarkers.push(m);});
       setHost(items.map(w=>{const mapUrl='https://www.google.com/maps/search/?api=1&query='+w.lat+','+w.lng;return `<div class="workshop-item"><div><strong>${esc(w.name)}</strong><div class="meta">${w.distance.toFixed(1)} km · <span class="${w.cls}">${esc(w.status)}</span></div></div><a class="btn small" href="${mapUrl}" target="_blank" rel="noopener">Google Maps</a></div>`;}).join(''));
       state.workshopMap.invalidateSize();
@@ -605,6 +640,8 @@
       if(btn.dataset.page==='rescue') setTimeout(()=>{if(state.rescueMap)state.rescueMap.invalidateSize();},250);
       if(btn.dataset.page==='consult') setTimeout(()=>{renderConsultHistory();renderCustomerChat();},50);
       if(btn.dataset.page==='history') setTimeout(loadServiceHistory,50);
+      if(btn.dataset.page==='orders') setTimeout(renderV12CustomerOrders,50);
+      if(btn.dataset.page==='ops') setTimeout(renderV12Operations,100);
     },true);
     const host=document.querySelector('#rescue .grid.g2 > div:last-child'); if(host && !$('#liveTrackingHost')){const d=document.createElement('div');d.id='liveTrackingHost';host.appendChild(d);}
     window.requestRescue=requestRescueV11;
