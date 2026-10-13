@@ -76,12 +76,13 @@
       state.profile=data;
     }
     const profileData=state.profile||{};
+    document.body.dataset.userRole=profileData.role||'customer';
     const name=profileData.full_name||fallbackName;
     const avatar=(name.trim()[0]||'R').toUpperCase();
     const firstName=name.trim().split(/\s+/)[0]||'Rider';
     document.querySelectorAll('.profile strong').forEach(x=>x.textContent=name);
     document.querySelectorAll('.profile small').forEach(x=>x.textContent=`${profileData.role||'customer'} · ${state.user.email}`);
-    document.querySelectorAll('.avatar').forEach(x=>x.textContent=avatar);
+    document.querySelectorAll('.avatar').forEach(x=>{if(!x.querySelector('img'))x.textContent=avatar;});
     if($('#welcomeName')) $('#welcomeName').textContent=name;
     const homeTitle=$('#pageTitle');
     if(homeTitle && document.querySelector('#home.page.active')) homeTitle.innerHTML=`Welcome back, <span id="welcomeName">${esc(name)}</span>.`;
@@ -95,18 +96,7 @@
     if(['owner','mechanic','workshop','admin'].includes(profileData.role)) setTimeout(renderV12Operations,120);
     const teamBtn=document.querySelector('[data-page="team"]'); if(teamBtn) teamBtn.style.display=['owner','admin'].includes(profileData.role)?'flex':'none';
     const opsTitle=document.querySelector('#ops h2'); if(opsTitle && profileData.role==='owner') opsTitle.textContent='Owner Operations Overview';
-
-    // Owner accounts should land on the operations dashboard after profile hydration.
-    // Keep the normal customer landing page for all other roles.
-    if(profileData.role==='owner'){
-      const teamBtn=document.querySelector('[data-page="team"]');
-      if(teamBtn) teamBtn.style.display='flex';
-      if(opsBtn) opsBtn.style.display='flex';
-      setTimeout(()=>{
-        if(typeof window.go==='function') window.go('ops');
-        else if(typeof go==='function') go('ops');
-      },180);
-    }
+    if(profileData.role==='owner') setTimeout(()=>{if(typeof window.go==='function')window.go('ops');},180);
   }
 
 
