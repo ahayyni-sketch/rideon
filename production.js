@@ -89,10 +89,12 @@
     if($('#profileEmail')) $('#profileEmail').value=state.user.email||'';
     if($('#profilePhone')) $('#profilePhone').value=profileData.phone||'';
     if($('#roleBadge')) $('#roleBadge').textContent=profileData.role||'customer';
-    const opsBtn=document.querySelector('[data-page="ops"]'); if(opsBtn) opsBtn.style.display=['mechanic','workshop','admin'].includes(profileData.role)?'flex':'none';
+    const opsBtn=document.querySelector('[data-page="ops"]'); if(opsBtn) opsBtn.style.display=['owner','mechanic','workshop','admin'].includes(profileData.role)?'flex':'none';
     if(profileData.role==='mechanic') renderMechanicPanel();
-    if(['workshop','admin'].includes(profileData.role)) renderStaffDispatchPanel();
-    if(['mechanic','workshop','admin'].includes(profileData.role)) setTimeout(renderV12Operations,120);
+    if(['workshop','admin','owner'].includes(profileData.role)) renderStaffDispatchPanel();
+    if(['owner','mechanic','workshop','admin'].includes(profileData.role)) setTimeout(renderV12Operations,120);
+    const teamBtn=document.querySelector('[data-page="team"]'); if(teamBtn) teamBtn.style.display=['owner','admin'].includes(profileData.role)?'flex':'none';
+    const opsTitle=document.querySelector('#ops h2'); if(opsTitle && profileData.role==='owner') opsTitle.textContent='Owner Operations Overview';
   }
 
 
@@ -356,7 +358,7 @@
 
   async function renderV12Operations(){
     const ops=$('#ops');
-    if(!ops || !['mechanic','workshop','admin'].includes(state.profile?.role)) return;
+    if(!ops || !['owner','mechanic','workshop','admin'].includes(state.profile?.role)) return;
     let panel=$('#v12Operations');
     if(!panel){
       panel=document.createElement('div'); panel.id='v12Operations'; panel.className='card'; panel.style.marginTop='16px'; ops.appendChild(panel);
@@ -534,7 +536,7 @@
     e.target.reset(); await renderConsultHistory(); toast('Konsultasi terkirim ke Customer Service RIDEON.');
   }
   async function renderSupportInbox(){
-    const ops=$('#ops'); if(!ops || !['mechanic','workshop','admin'].includes(state.profile?.role) || $('#supportInbox'))return;
+    const ops=$('#ops'); if(!ops || !['owner','mechanic','workshop','admin'].includes(state.profile?.role) || $('#supportInbox'))return;
     const div=document.createElement('div'); div.id='supportInbox'; div.className='card'; div.style.marginTop='16px';
     div.innerHTML=`<div class="eyebrow">Customer service</div><h2 style="margin-top:6px">Consultation inbox</h2><div id="supportInboxBody" class="table-wrap"><div class="empty">Loading…</div></div>`;
     ops.appendChild(div);
@@ -611,7 +613,7 @@
   }
 
   async function renderChatInbox(){
-    const ops=$('#ops'); if(!ops||!['mechanic','workshop','admin'].includes(state.profile?.role))return;
+    const ops=$('#ops'); if(!ops||!['owner','mechanic','workshop','admin'].includes(state.profile?.role))return;
     let box=$('#chatInbox');
     if(!box){box=document.createElement('div');box.id='chatInbox';box.className='card';box.style.marginTop='16px';ops.appendChild(box);}
     box.innerHTML='<div class="eyebrow">Customer chat</div><h2 style="margin-top:6px">Live customer messages</h2><div id="chatInboxBody" class="list"><div class="empty">Loading…</div></div>';
