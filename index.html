@@ -25,6 +25,51 @@ main{margin-left:246px;padding:27px 32px 50px;max-width:1600px}.topbar{display:f
 @media(max-width:760px){.sidebar{display:none}main{margin:0;padding:20px 15px 95px}.topbar h1{font-size:25px}.topbar{align-items:flex-start}.top-actions .btn span{display:none}.mobilebar{display:flex;position:fixed;z-index:10;inset:auto 0 0;background:#091512;border-top:1px solid var(--line);justify-content:space-around;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}.mobilebar button{border:0;background:none;color:var(--muted);font-size:10px;display:grid;gap:3px;justify-items:center}.mobilebar button b{font-size:18px;font-weight:500}.mobilebar button.active{color:var(--lime)}.g3{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:1fr}.hero h2{font-size:28px}.card{padding:16px}}
 @media(max-width:460px){.g3,.g4{grid-template-columns:1fr}.topbar h1{font-size:23px}.top-actions{gap:5px}.top-actions .icon-btn{width:38px;height:38px}.hero-main{min-height:300px}.hero .card:last-child{min-height:auto}.product{align-items:flex-start}.product-icon{width:60px;height:60px;flex-basis:60px}.section-head{align-items:flex-start}.actions .btn{flex:1}}
 </style>
+
+<style id="rideon-neon-dashboard-v1">
+/* RIDEON visual refresh: navy glass surfaces, electric-blue borders, neon-lime actions */
+:root{--bg:#030b18;--surface:#07162a;--surface2:#0b2040;--line:#123f70;--text:#edf6ff;--muted:#91a9c6;--lime:#a6ff4d;--lime2:#d3ff9e;--blue:#24b8ff;--r:15px;--shadow:0 14px 42px #0007}
+body{background:radial-gradient(ellipse at 82% -12%,#06446c55,transparent 34%),radial-gradient(ellipse at 0% 40%,#07254b66,transparent 35%),var(--bg);background-attachment:fixed}
+.sidebar{background:linear-gradient(180deg,#061329f7,#030b18f8);border-right-color:#13518a;box-shadow:10px 0 38px #0003}
+.brand .logo{box-shadow:0 0 24px #a6ff4d25}
+.tagline{color:#8daed1}
+.nav-label{color:#5e87b4}
+.nav button{color:#a8bfdc;border:1px solid transparent;transition:background .18s,border-color .18s,color .18s}
+.nav button:hover,.nav button.active{background:linear-gradient(100deg,#123b61,#0b2544);border-color:#1764a0;color:#f4faff}
+.nav button.active{box-shadow:inset 3px 0 var(--lime),0 0 18px #168bd414}
+main{max-width:1800px}
+.crumb{color:var(--blue)}
+.topbar h1{letter-spacing:-1px}
+.icon-btn,.btn{background:linear-gradient(145deg,#0c2442,#08172d);border-color:#15518a;transition:transform .18s,border-color .18s,filter .18s}
+.icon-btn:hover,.btn:hover{border-color:#28baff;filter:brightness(1.12)}
+.btn.primary{background:linear-gradient(100deg,#baff72,#8cff48);color:#07140b;border-color:#baff72;box-shadow:0 5px 20px #a6ff4d20}
+.btn.danger{background:#301b2a;color:#ffaaa8;border-color:#79374c}
+.card{background:linear-gradient(145deg,#0a1d36f2,#061329f5);border-color:#124477;box-shadow:0 12px 38px #0004,inset 0 1px #ffffff06;backdrop-filter:blur(8px)}
+.card h2{letter-spacing:-.35px}
+.hero-main{background:radial-gradient(ellipse at 83% 24%,#13a9ff25,transparent 32%),radial-gradient(ellipse at 75% 90%,#a6ff4d15,transparent 36%),linear-gradient(130deg,#102e52,#07152a 78%)}
+.hero-main:after{color:#a6ff4d0b}
+.pill{background:#173b35;color:#b9ff78;border:1px solid #286b58}
+.pill.blue{background:#0b2b48;color:#7dd5ff;border-color:#155b88}
+.pill.amber{background:#392e1c;color:#ffd18a;border-color:#705326}
+.pill.red{background:#351b29;color:#ffaaa8;border-color:#70364b}
+.service-tile:hover{transform:translateY(-3px);border-color:#25aaff;box-shadow:0 14px 36px #007dca20}
+.tile-icon,.arrow,.price{color:var(--lime)}
+.field input,.field select,.field textarea{background:#030d1c;border-color:#164576}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#24b8ff;box-shadow:0 0 0 3px #24b8ff1a}
+th,td{border-bottom-color:#12375c}
+.map{border-color:#14518a;background-color:#07182d;background-image:linear-gradient(26deg,transparent 47%,#174b70 48%,#174b70 50%,transparent 51%),linear-gradient(112deg,transparent 47%,#174b70 48%,#174b70 50%,transparent 51%),linear-gradient(80deg,transparent 47%,#102f52 48%,#102f52 50%,transparent 51%)}
+.map-label{background:#041126ed;border-color:#1a5a8b}
+.map-road{border-color:#a6ff4d}
+.product-icon{background:#0b2540;border:1px solid #154b7a}
+.compat{background:#06152a;border-color:#15416c}
+.progress span{background:#163453}.progress span.done{background:var(--lime)}
+.step-dot{background:#123653;color:#b8ff76}.step.active .step-dot{background:var(--lime);color:#07140b}
+.modal{background:#07182e;border-color:#15518a}
+.profile{border-top-color:#123f70}
+@media(max-width:1100px){main{padding:24px 22px 40px}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.sidebar{background:#041126f7;border-right-color:#123f70}.topbar h1{font-size:24px}.card{padding:16px}.hero-main{min-height:245px}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+</style>
 <style id="rideon-auth-boot-css">html.rideon-auth-boot body > .layout,html.rideon-auth-boot body > main,html.rideon-auth-boot .layout,html.rideon-auth-boot main,html.rideon-auth-boot .sidebar,html.rideon-auth-boot .mobilebar{visibility:hidden!important}html.rideon-auth-boot #productionAuth{visibility:visible!important}</style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#08110f">
